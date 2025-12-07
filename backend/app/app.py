@@ -5,7 +5,7 @@ from datetime import timedelta
 import bcrypt
 import models
 from db import session_local
-from flask import Flask, g, jsonify, request, session
+from flask import Flask, g, jsonify, message_flashed, request, session
 
 app = Flask(__name__)
 app.config["SECRET_KEY"] = os.getenv("SECRET_KEY")
@@ -87,25 +87,41 @@ def signup():
 # -------------------------
 # Get messages (example)
 # -------------------------
-@app.route("/messages")
-def get_messages():
-    # you can only see messages if logged in
+@app.route("/messages", methods=["GET", "POST"])
+def messages():
     if "user_id" not in session:
+        # you can only see messages if logged in
         return jsonify({"error": "Unauthorized"}), 401
 
-    msgs = g.db.query(models.Message).order_by(models.Message.date_created.desc()).all()
+    if request.method == "POST":
+        data = request.get_json()
+        message = data.get("message")
+        if not message:
+            return jsonify({"error": "Message is required"}), 400
+        g.db.add(models.Message(sender=session["user_id"], message=message))
+        g.db.commit()
+        return jsonify({"message": "Message sent"}), 201
 
-    return jsonify(
-        [
-            {
-                "id": m.id,
-                "sender": m.sender,
-                "message": m.message,
-                "date": m.date_created.isoformat(),
-            }
-            for m in msgs
-        ]
-    )
+    elif request.method == "GET":
+        msgs = (
+            g.db.query(models.Message)
+            .order_by(models.Message.date_created.desc())
+            .all()
+        )
+
+        return jsonify(
+            [
+                {
+                    "id": m.id,
+                    "sender": m.sender,
+                    "message": m.message,
+                    "date": m.date_created.isoformat(),
+                }
+                for m in msgs
+            ]
+        )
+    else:
+        return jsonify({"error": "Method not allowed"}), 405
 
 
 # -------------------------
