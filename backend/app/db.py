@@ -1,3 +1,4 @@
+# This work is licensed under the terms of the MIT license
 # db.py
 import os
 
@@ -8,7 +9,7 @@ from sqlalchemy.orm import declarative_base, sessionmaker
 host = os.getenv("MYSQL_HOST", "localhost")
 port = os.getenv("MYSQL_PORT", "3307")
 user = os.getenv("MYSQL_USER", "user")
-password = os.getenv("MYSQL_PASSWORD", "userpassword")
+password = os.getenv("MYSQL_PASSWORD")
 database = os.getenv("MYSQL_DATABASE", "main")
 
 

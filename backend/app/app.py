@@ -1,3 +1,4 @@
+# This work is licensed under the terms of the MIT license
 # app.py
 import os
 from datetime import timedelta
@@ -5,7 +6,7 @@ from datetime import timedelta
 import bcrypt
 import models
 from db import session_local
-from flask import Flask, g, jsonify, message_flashed, request, session
+from flask import Flask, g, jsonify, request, session
 
 app = Flask(__name__)
 app.config["SECRET_KEY"] = os.getenv("SECRET_KEY")
@@ -103,19 +104,25 @@ def messages():
         return jsonify({"message": "Message sent"}), 201
 
     elif request.method == "GET":
+        limit = int(request.args.get("limit", 50))
+        offset = int(request.args.get("offset", 0))
         msgs = (
-            g.db.query(models.Message)
+            g.db.query(models.Message, models.User.username)
+            .join(models.User, models.Message.sender == models.User.id)
             .order_by(models.Message.date_created.desc())
+            .limit(limit)
+            .offset(offset)
             .all()
         )
 
         return jsonify(
             [
                 {
-                    "id": m.id,
-                    "sender": m.sender,
-                    "message": m.message,
-                    "date": m.date_created.isoformat(),
+                    "id": m.Message.id,
+                    "sender": m.Message.sender,
+                    "sender_name": m.username,
+                    "message": m.Message.message,
+                    "date": m.Message.date_created.isoformat(),
                 }
                 for m in msgs
             ]
