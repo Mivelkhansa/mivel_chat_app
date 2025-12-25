@@ -23,6 +23,8 @@ services:
     build:
       context: ./app
       dockerfile: Dockerfile
+    volumes:
+      - ./app:/app:Z
     ports:
       - "5000:5000"
     expose:

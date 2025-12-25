@@ -1,6 +1,7 @@
 # This work is licensed under the terms of the MIT license
 # app.py
 import os
+import sys
 from datetime import timedelta
 
 import bcrypt
@@ -8,6 +9,7 @@ import models
 from db import session_local
 from flask import Flask, g, jsonify, request, session
 from flask_socketio import SocketIO, disconnect, emit
+from loguru import logger
 
 app = Flask(__name__)
 app.config["SECRET_KEY"] = os.getenv("SECRET_KEY")
@@ -18,6 +20,20 @@ socketio = SocketIO(
     engineio_logger=True,
 )
 
+
+logger.remove(0)
+logger.add(
+    sys.stderr,
+    format="{time:YYYY-MM-DD HH:mm:ss} | {level} | {message}",
+    level="TRACE",
+    colorize=True,
+)
+
+logger.add(
+    "app.log",
+    format="{time:YYYY-MM-DD HH:mm:ss} | {level} | {message}",
+    level="TRACE",
+)
 
 # Cookie/session settings
 app.config["SESSION_COOKIE_HTTPONLY"] = True
@@ -31,11 +47,13 @@ app.config["PERMANENT_SESSION_LIFETIME"] = timedelta(days=7)
 # -------------------------
 @app.before_request
 def start_session():
+    logger.trace("Starting session")
     g.db = session_local()
 
 
 @app.teardown_request
 def teardown_session(exception):
+    logger.trace("Teardown session")
     db = g.pop("db", None)
     if db is not None:
         db.close()
