@@ -7,14 +7,22 @@ import bcrypt
 import models
 from db import session_local
 from flask import Flask, g, jsonify, request, session
+from flask_socketio import SocketIO, disconnect, emit
 
 app = Flask(__name__)
 app.config["SECRET_KEY"] = os.getenv("SECRET_KEY")
+socketio = SocketIO(
+    app,
+    cors_allowed_origins="*",
+    logger=True,
+    engineio_logger=True,
+)
+
 
 # Cookie/session settings
 app.config["SESSION_COOKIE_HTTPONLY"] = True
-app.config["SESSION_COOKIE_SECURE"] = True  # requires HTTPS in production
-app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
+app.config["SESSION_COOKIE_SECURE"] = False  # requires HTTPS in production
+app.config["SESSION_COOKIE_SAMESITE"] = "None"
 app.config["PERMANENT_SESSION_LIFETIME"] = timedelta(days=7)
 
 
@@ -31,6 +39,12 @@ def teardown_session(exception):
     db = g.pop("db", None)
     if db is not None:
         db.close()
+
+
+@app.route("/ping")
+def ping():
+    print("PING HIT")
+    return "pong"
 
 
 # -------------------------
@@ -88,57 +102,51 @@ def signup():
 # -------------------------
 # Get messages (example)
 # -------------------------
-@app.route("/messages", methods=["GET", "POST"])
-def messages():
+# [2025-12-23]todo: change to websocket, keep it for legacy or fallback
+@socketio.on("message")
+def handle_message(data):
     if "user_id" not in session:
         # you can only see messages if logged in
-        return jsonify({"error": "Unauthorized"}), 401
+        emit("error", {"error": "Unauthorized"})
+        return
 
-    if request.method == "POST":
-        data = request.get_json()
-        message = data.get("message")
-        if not message:
-            return jsonify({"error": "Message is required"}), 400
-        g.db.add(models.Message(sender=session["user_id"], message=message))
-        g.db.commit()
-        return jsonify({"message": "Message sent"}), 201
+    data = request.get_json()
+    message = data.get("message")
+    if not message:
+        emit("error", {"error": "Message is required"})
+        return
+    g.db.add(models.Message(sender=session["user_id"], message=message))
+    g.db.commit()
+    sender = g.db.query(models.User).filter_by(id=session["user_id"]).first()
 
-    elif request.method == "GET":
-        limit = int(request.args.get("limit", 50))
-        offset = int(request.args.get("offset", 0))
-        msgs = (
-            g.db.query(models.Message, models.User.username)
-            .join(models.User, models.Message.sender == models.User.id)
-            .order_by(models.Message.date_created.desc())
-            .limit(limit)
-            .offset(offset)
-            .all()
-        )
-
-        return jsonify(
-            [
-                {
-                    "id": m.Message.id,
-                    "sender": m.Message.sender,
-                    "sender_name": m.username,
-                    "message": m.Message.message,
-                    "date": m.Message.date_created.isoformat(),
-                }
-                for m in msgs
-            ]
-        )
-    else:
-        return jsonify({"error": "Method not allowed"}), 405
+    emit("new_message", {"sender": sender.username, "message": message}, broadcast=True)
 
 
-# -------------------------
-# Contact
-# -------------------------
-@app.route("/contact")
-def contact():
-    return jsonify({"name": "mivel khavilla khansa", "email": "mivelkhansa6@gmail.com"})
+@socketio.on("connect")
+def handle_connect():
+    if "user_id" not in session:
+        disconnect()
+        return
+    msgs = (
+        g.db.query(models.Message, models.User.username)
+        .join(models.User, models.Message.sender == models.User.id)
+        .order_by(models.Message.date_created.desc())
+        .limit(50)
+        .all()
+    )
+
+    messages = [
+        {
+            "id": m.Message.id,
+            "sender": m.Message.sender,
+            "sender_name": m.username,
+            "message": m.Message.message,
+            "date": m.Message.date_created.isoformat(),
+        }
+        for m in msgs
+    ]
+    emit("message_history", messages)
 
 
 if __name__ == "__main__":
-    app.debug = True
-    app.run(host="0.0.0.0", port=5000)
+    socketio.run(app, debug=True, host="0.0.0.0", port=5000)
