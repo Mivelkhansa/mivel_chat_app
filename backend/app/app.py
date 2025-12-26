@@ -1,43 +1,59 @@
-# This work is licensed under the terms of the MIT license
 # app.py
+# MIT License
 
 import os
 import sys
 import uuid
-from datetime import timedelta
+from datetime import datetime, timedelta
 
 import bcrypt
+import jwt
 import models
 from db import session_local
-from flask import Flask, g, jsonify, request, session
-from flask_socketio import SocketIO, disconnect, emit
+from flask import Flask, g, jsonify, request
+from flask_cors import CORS
+from flask_socketio import SocketIO, emit
 from loguru import logger
 
 # -------------------------
 # App & Socket.IO
 # -------------------------
 app = Flask(__name__)
-app.config["SECRET_KEY"] = os.getenv("SECRET_KEY")
+
+JWT_ACCESS_SECRET_KEY = os.getenv("JWT_ACCESS_SECRET_KEY", "access-secret")
+JWT_REFRESH_SECRET_KEY = os.getenv("JWT_REFRESH_SECRET_KEY", "refresh-secret")
+JWT_ACCESS_EXPIRATION = int(os.getenv("JWT_ACCESS_EXPIRATION", 600))
+JWT_REFRESH_EXPIRATION = int(os.getenv("JWT_REFRESH_EXPIRATION", 3600))
+JWT_ALGORITHM = "HS256"
 
 socketio = SocketIO(
     app,
-    cors_allowed_origins="*",
+    cors_allowed_origins=[
+        "http://localhost:3000",
+        "http://localhost:5173",
+    ],
     logger=True,
     engineio_logger=True,
+)
+
+CORS(
+    app,
+    origins=[
+        "http://localhost:3000",
+        "http://localhost:5173",
+    ],
 )
 
 # -------------------------
 # Logging
 # -------------------------
 logger.remove(0)
-
 logger.add(
     sys.stderr,
     format="{time:YYYY-MM-DD HH:mm:ss} | {level} | {message} | {extra}",
     level="TRACE",
     colorize=True,
 )
-
 logger.add(
     "app.log",
     format="{time:YYYY-MM-DD HH:mm:ss} | {level} | {message} | {extra}",
@@ -45,42 +61,88 @@ logger.add(
     serialize=True,
 )
 
+
 # -------------------------
-# Session / Cookie config
+# JWT helpers
 # -------------------------
-app.config["SESSION_COOKIE_HTTPONLY"] = True
-app.config["SESSION_COOKIE_SECURE"] = False  # HTTPS only in production
-app.config["SESSION_COOKIE_SAMESITE"] = "None"
-app.config["PERMANENT_SESSION_LIFETIME"] = timedelta(days=7)
+def create_access_token(user_id: int) -> str:
+    return jwt.encode(
+        {
+            "sub": str(user_id),
+            "typ": "access",
+            "iat": datetime.utcnow(),
+            "exp": datetime.utcnow() + timedelta(seconds=JWT_ACCESS_EXPIRATION),
+            "iss": "chat_app",
+        },
+        JWT_ACCESS_SECRET_KEY,
+        algorithm=JWT_ALGORITHM,
+    )
+
+
+def create_refresh_token(user_id: int) -> str:
+    return jwt.encode(
+        {
+            "sub": str(user_id),
+            "typ": "refresh",
+            "iat": datetime.utcnow(),
+            "exp": datetime.utcnow() + timedelta(seconds=JWT_REFRESH_EXPIRATION),
+            "iss": "chat_app",
+        },
+        JWT_REFRESH_SECRET_KEY,
+        algorithm=JWT_ALGORITHM,
+    )
+
+
+def verify_access_token(token: str):
+    payload = jwt.decode(
+        token,
+        JWT_ACCESS_SECRET_KEY,
+        algorithms=[JWT_ALGORITHM],
+    )
+    if payload.get("typ") != "access":
+        raise jwt.InvalidTokenError("Not an access token")
+    return payload
 
 
 # -------------------------
-# Request lifecycle
+# HTTP lifecycle
 # -------------------------
 @app.before_request
 def start_request():
     g.request_id = str(uuid.uuid4())
     g.db = session_local()
 
-    # bind only stable context
-    g.log = logger.bind(request_id=g.request_id)
-    g.log.trace("Request started")
+    user_id = None
+    auth = request.headers.get("Authorization")
+
+    if auth and auth.startswith("Bearer "):
+        token = auth.split(" ", 1)[1]
+        try:
+            payload = verify_access_token(token)
+            user_id = int(payload["sub"])
+        except jwt.ExpiredSignatureError:
+            return jsonify({"error": "Token expired"}), 401
+        except jwt.InvalidTokenError:
+            return jsonify({"error": "Invalid token"}), 401
+
+    g.log = logger.bind(request_id=g.request_id, user_id=user_id)
+    g.log.trace("HTTP request started")
 
 
 @app.teardown_request
-def end_request(exception):
+def end_request(exc):
     if hasattr(g, "log"):
-        if exception:
-            g.log.error("Request failed", error=str(exception))
-        g.log.trace("Request ended")
+        if exc:
+            g.log.error("Request failed", error=str(exc))
+        g.log.trace("HTTP request ended")
 
     db = g.pop("db", None)
-    if db is not None:
+    if db:
         db.close()
 
 
 # -------------------------
-# Health check
+# Health
 # -------------------------
 @app.route("/ping")
 def ping():
@@ -88,7 +150,7 @@ def ping():
 
 
 # -------------------------
-# LOGIN
+# Auth routes
 # -------------------------
 @app.route("/login", methods=["POST"])
 def login():
@@ -99,155 +161,142 @@ def login():
     g.log.trace("Login attempt", username=username)
 
     try:
-        user = g.db.query(models.User).filter(models.User.username == username).first()
-
+        user = g.db.query(models.User).filter_by(username=username).first()
         if not user or not bcrypt.checkpw(
-            password.encode(),
-            user.password_hash.encode(),
+            password.encode(), user.password_hash.encode()
         ):
-            g.log.warning("Login failed", username=username)
+            g.log.warning("Login failed")
             return jsonify({"error": "Invalid credentials"}), 401
 
-        session.permanent = True
-        session["user_id"] = user.id
-
-        # rebind volatile context
-        g.log = g.log.bind(user_id=user.id)
-        g.log.info("Login succeeded", username=username)
-
-        return jsonify({"message": "Login successful"}), 200
+        return jsonify(
+            {
+                "access_token": create_access_token(user.id),
+                "refresh_token": create_refresh_token(user.id),
+            }
+        ), 200
 
     except Exception:
         g.db.rollback()
-        g.log.exception("Login failed due to database error")
-        return jsonify({"error": "Database error"}), 500
+        g.log.exception("Login error")
+        return jsonify({"error": "Server error"}), 500
 
 
-# -------------------------
-# LOGOUT
-# -------------------------
-@app.route("/logout", methods=["POST"])
-def logout():
-    user_id = session.get("user_id")
-    session.clear()
-
-    g.log.info("Logout succeeded", user_id=user_id)
-    return jsonify({"message": "Logged out"}), 200
-
-
-# -------------------------
-# SIGNUP
-# -------------------------
 @app.route("/signup", methods=["POST"])
 def signup():
     data = request.get_json()
     username = data.get("username")
-    raw_password = data.get("password")
+    password = data.get("password")
 
-    g.log.trace("Signup attempt", username=username)
-
-    password_hash = bcrypt.hashpw(
-        raw_password.encode(),
-        bcrypt.gensalt(),
-    ).decode()
+    pw_hash = bcrypt.hashpw(password.encode(), bcrypt.gensalt()).decode()
 
     try:
-        new_user = models.User(
-            username=username,
-            password_hash=password_hash,
-        )
-        g.db.add(new_user)
+        g.db.add(models.User(username=username, password_hash=pw_hash))
         g.db.commit()
-
-        g.log.info("Signup succeeded", username=username)
+        g.log.info("User created", username=username)
         return jsonify({"message": "User created"}), 201
-
     except Exception:
         g.db.rollback()
         g.log.exception("Signup failed")
-        return jsonify({"error": "Failed to create user"}), 500
+        return jsonify({"error": "Signup failed"}), 500
 
 
 # -------------------------
-# Socket.IO: messages
+# Socket.IO (JWT)
 # -------------------------
+socket_state: dict[str, dict] = {}
+
+
+@socketio.on("connect")
+def socket_connect(auth):
+    request_id = str(uuid.uuid4())
+    log = logger.bind(request_id=request_id)
+
+    token = auth.get("token") if auth else None
+    if not token:
+        log.warning("Socket rejected: no token")
+        return False
+
+    try:
+        payload = verify_access_token(token)
+    except jwt.ExpiredSignatureError:
+        log.warning("Socket rejected: token expired")
+        return False
+    except jwt.InvalidTokenError:
+        log.warning("Socket rejected: invalid token")
+        return False
+
+    socket_state[request.sid] = {
+        "user_id": int(payload["sub"]),
+        "request_id": request_id,
+    }
+
+    db = session_local()
+    last_received_id = int(request.args.get("last_received_id", 0))
+    try:
+        msgs_query = (
+            db.query(models.Message, models.User.username)
+            .join(models.User, models.Message.sender == models.User.id)
+            .filter(models.Message.id > last_received_id)
+            .order_by(models.Message.date_created.asc())
+            .all()
+        )
+        msgs = [
+            {"id": msg.id, "sender": sender, "message": msg.message}
+            for msg, sender in msgs_query
+        ]
+        emit("old_messages", msgs)
+    except Exception:
+        log.exception("Failed to fetch messages")
+        return False
+    finally:
+        db.close()
+
+    log.bind(user_id=payload["sub"]).info("Socket connected")
+
+
 @socketio.on("message")
-def handle_message(data):
-    if "user_id" not in session:
-        g.log.warning("Socket message rejected: unauthenticated")
+def socket_message(data):
+    state = socket_state.get(request.sid)
+    if not state:
         emit("error", {"error": "Unauthorized"})
         return
 
+    user_id = state["user_id"]
+    log = logger.bind(
+        request_id=state["request_id"],
+        user_id=user_id,
+    )
+
     message = data.get("message")
     if not message:
-        g.log.warning("Socket message rejected: empty message")
-        emit("error", {"error": "Message is required"})
+        emit("error", {"error": "Message required"})
         return
 
-    user_id = session["user_id"]
-
+    db = session_local()
     try:
-        g.db.add(models.Message(sender=user_id, message=message))
-        g.db.commit()
-
-        sender = g.db.query(models.User).filter_by(id=user_id).first()
-
+        db.add(models.Message(sender=user_id, message=message))
+        db.commit()
+        sender = db.query(models.User).filter_by(id=user_id).first()
         emit(
             "new_message",
             {"sender": sender.username, "message": message},
             broadcast=True,
         )
-
     except Exception:
-        g.db.rollback()
-        g.log.exception("Failed to save socket message")
-        emit("db_error", {"error": "Failed to save message"})
+        db.rollback()
+        log.exception("Message save failed")
+        emit("error", {"error": "DB error"})
+    finally:
+        db.close()
 
 
-# -------------------------
-# Socket.IO: connect
-# -------------------------
-@socketio.on("connect")
-def handle_connect():
-    if "user_id" not in session:
-        g.log.warning("Socket connect rejected: unauthenticated")
-        disconnect()
-        return
-
-    user_id = session["user_id"]
-    g.log = g.log.bind(user_id=user_id)
-    g.log.info("Socket connected")
-
-    try:
-        msgs = (
-            g.db.query(models.Message, models.User.username)
-            .join(models.User, models.Message.sender == models.User.id)
-            .order_by(models.Message.date_created.desc())
-            .limit(50)
-            .all()
-        )
-
-        messages = [
-            {
-                "id": m.Message.id,
-                "sender": m.Message.sender,
-                "sender_name": m.username,
-                "message": m.Message.message,
-                "date": m.Message.date_created.isoformat(),
-            }
-            for m in msgs
-        ]
-
-        emit("message_history", messages)
-
-    except Exception:
-        g.db.rollback()
-        g.log.exception("Failed to fetch message history")
-        emit("db_error", {"error": "Failed to fetch messages"})
+@socketio.on("disconnect")
+def socket_disconnect():
+    socket_state.pop(request.sid, None)
 
 
 # -------------------------
 # Run
 # -------------------------
 if __name__ == "__main__":
-    socketio.run(app, debug=True, host="0.0.0.0", port=5000)
+    socketio.run(app, host="0.0.0.0", port=5000, debug=True)

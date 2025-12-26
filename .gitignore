@@ -2,3 +2,5 @@ __pycache__/
 .env
 backend/db/data/
 backend/app/app.log
+note.txt
+.gitignore

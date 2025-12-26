@@ -2,7 +2,7 @@
 <html lang="en">
     <head>
         <meta charset="UTF-8" />
-        <title>Flask Socket.IO Test</title>
+        <title>Flask Socket.IO JWT Test</title>
         <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
 
         <style>
@@ -25,7 +25,7 @@
     </head>
 
     <body>
-        <h2>Flask + Socket.IO Test</h2>
+        <h2>Flask + Socket.IO (JWT)</h2>
 
         <label>Username: <input id="username" value="testuser" /></label><br />
         <label
@@ -45,6 +45,7 @@
 
         <script>
             let socket = null;
+            let accessToken = null;
 
             function log(msg) {
                 const el = document.getElementById("log");
@@ -56,7 +57,6 @@
                 const res = await fetch("http://localhost:5000/signup", {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
-                    credentials: "include",
                     body: JSON.stringify({
                         username: username.value,
                         password: password.value,
@@ -71,26 +71,38 @@
                 const res = await fetch("http://localhost:5000/login", {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
-                    credentials: "include",
                     body: JSON.stringify({
                         username: username.value,
                         password: password.value,
                     }),
                 });
 
+                const data = await res.json();
                 log(`Login status: ${res.status}`);
-                log(await res.text());
+                log(JSON.stringify(data, null, 2));
+
+                if (res.ok) {
+                    accessToken = data.access_token;
+                    log("✅ Access token stored");
+                }
             }
 
             function connectSocket() {
-                log("Connecting socket...");
+                if (!accessToken) {
+                    log("❌ Login first (no token)");
+                    return;
+                }
+
+                log("Connecting socket with JWT...");
 
                 socket = io("http://localhost:5000", {
-                    withCredentials: true,
+                    auth: {
+                        token: accessToken,
+                    },
                 });
 
                 socket.on("connect", () => {
-                    log("✅ Socket connected successfully");
+                    log("✅ Socket connected");
                 });
 
                 socket.on("disconnect", (reason) => {
@@ -98,14 +110,14 @@
                 });
 
                 socket.on("connect_error", (err) => {
-                    log("❌ Connection failed:");
-                    log(err.message || JSON.stringify(err));
+                    log("❌ Socket error:");
+                    log(err.message || err);
                 });
 
-                socket.on("message_history", (msgs) => {
+                socket.on("old_messages", (msgs) => {
                     log("📜 Message history:");
                     msgs.forEach((m) => {
-                        log(`[${m.sender_name}] ${m.message}`);
+                        log(`[${m.sender}] ${m.message}`);
                     });
                 });
 
