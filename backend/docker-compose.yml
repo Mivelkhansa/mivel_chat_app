@@ -19,6 +19,15 @@ services:
       - MYSQL_USER=${DB_USER}
       - MYSQL_PASSWORD=${DB_PASSWORD}
 
+  redis:
+    image: docker.io/redis:8.4.0
+    container_name: redis_container
+    restart: always
+    ports:
+      - "6379:6379"
+    expose:
+      - 6379
+
   app:
     build:
       context: ./app
@@ -35,9 +44,12 @@ services:
       - MYSQL_DATABASE=${DB_DATABASE}
       - MYSQL_USER=${DB_USER}
       - MYSQL_PASSWORD=${DB_PASSWORD}
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
       - JWT_ACCESS_SECRET_KEY=${JWT_ACCESS_SECRET_KEY}
       - JWT_REFRESH_SECRET_KEY=${JWT_REFRESH_SECRET_KEY}
       - JWT_REFRESH_EXPIRATION=3600
       - JWT_ACCESS_EXPIRATION=600
     depends_on:
       - db
+      - redis

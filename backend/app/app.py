@@ -1,7 +1,6 @@
 # app.py
 # MIT License
 
-import os
 import sys
 import uuid
 from datetime import datetime, timedelta
@@ -9,6 +8,16 @@ from datetime import datetime, timedelta
 import bcrypt
 import jwt
 import models
+import redis
+from config import (
+    JWT_ACCESS_EXPIRATION,
+    JWT_ACCESS_SECRET_KEY,
+    JWT_ALGORITHM,
+    JWT_REFRESH_EXPIRATION,
+    JWT_REFRESH_SECRET_KEY,
+    REDIS_HOST,
+    REDIS_PORT,
+)
 from db import session_local
 from flask import Flask, g, jsonify, request
 from flask_cors import CORS
@@ -20,17 +29,12 @@ from loguru import logger
 # -------------------------
 app = Flask(__name__)
 
-JWT_ACCESS_SECRET_KEY = os.getenv("JWT_ACCESS_SECRET_KEY", "access-secret")
-JWT_REFRESH_SECRET_KEY = os.getenv("JWT_REFRESH_SECRET_KEY", "refresh-secret")
-JWT_ACCESS_EXPIRATION = int(os.getenv("JWT_ACCESS_EXPIRATION", 600))
-JWT_REFRESH_EXPIRATION = int(os.getenv("JWT_REFRESH_EXPIRATION", 3600))
-JWT_ALGORITHM = "HS256"
-
 socketio = SocketIO(
     app,
     cors_allowed_origins=[
         "http://localhost:3000",
         "http://localhost:5173",
+        "http://localhost:6767",
     ],
     logger=True,
     engineio_logger=True,
@@ -43,6 +47,11 @@ CORS(
         "http://localhost:5173",
     ],
 )
+
+# -------------------------
+# Redis
+# -------------------------
+redis_client = redis.Redis(host=REDIS_HOST, port=REDIS_PORT)
 
 # -------------------------
 # Logging
@@ -65,10 +74,10 @@ logger.add(
 # -------------------------
 # JWT helpers
 # -------------------------
-def create_access_token(user_id: int) -> str:
+def create_access_token(user_id: str) -> str:
     return jwt.encode(
         {
-            "sub": str(user_id),
+            "sub": user_id,
             "typ": "access",
             "iat": datetime.utcnow(),
             "exp": datetime.utcnow() + timedelta(seconds=JWT_ACCESS_EXPIRATION),
@@ -79,10 +88,10 @@ def create_access_token(user_id: int) -> str:
     )
 
 
-def create_refresh_token(user_id: int) -> str:
+def create_refresh_token(user_id: str) -> str:
     return jwt.encode(
         {
-            "sub": str(user_id),
+            "sub": user_id,
             "typ": "refresh",
             "iat": datetime.utcnow(),
             "exp": datetime.utcnow() + timedelta(seconds=JWT_REFRESH_EXPIRATION),
@@ -119,7 +128,7 @@ def start_request():
         token = auth.split(" ", 1)[1]
         try:
             payload = verify_access_token(token)
-            user_id = int(payload["sub"])
+            user_id = payload["sub"]
         except jwt.ExpiredSignatureError:
             return jsonify({"error": "Token expired"}), 401
         except jwt.InvalidTokenError:
@@ -170,8 +179,8 @@ def login():
 
         return jsonify(
             {
-                "access_token": create_access_token(user.id),
-                "refresh_token": create_refresh_token(user.id),
+                "access_token": create_access_token(user.user_id),
+                "refresh_token": create_refresh_token(user.user_id),
             }
         ), 200
 
@@ -226,7 +235,7 @@ def socket_connect(auth):
         return False
 
     socket_state[request.sid] = {
-        "user_id": int(payload["sub"]),
+        "user_id": payload["sub"],
         "request_id": request_id,
     }
 
@@ -235,7 +244,7 @@ def socket_connect(auth):
     try:
         msgs_query = (
             db.query(models.Message, models.User.username)
-            .join(models.User, models.Message.sender == models.User.id)
+            .join(models.User, models.Message.sender == models.User.user_id)
             .filter(models.Message.id > last_received_id)
             .order_by(models.Message.date_created.asc())
             .all()
@@ -276,7 +285,7 @@ def socket_message(data):
     try:
         db.add(models.Message(sender=user_id, message=message))
         db.commit()
-        sender = db.query(models.User).filter_by(id=user_id).first()
+        sender = db.query(models.User).filter_by(user_id=user_id).first()
         emit(
             "new_message",
             {"sender": sender.username, "message": message},

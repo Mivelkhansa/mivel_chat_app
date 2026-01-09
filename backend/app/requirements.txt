@@ -10,3 +10,5 @@ eventlet==0.40.4
 loguru==0.7.3
 flask-cors==6.0.2
 PyJWT==2.8.0
+redis==7.1.0
+cuid2==2.0.1
