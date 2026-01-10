@@ -24,5 +24,5 @@ A fast, simple, and modern chat application built with flask.
 
 ### Clone the repository
 ```bash
-https://github.com/Mivelkhansa/mivel_chatApp.git
-cd mivel_chatApp
+https://github.com/Mivelkhansa/mivel_chat_app.git
+cd mivel_chat_app
