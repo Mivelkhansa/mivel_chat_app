@@ -21,7 +21,15 @@ from config import (
 from db import session_local
 from flask import Flask, g, jsonify, request
 from flask_cors import CORS
-from flask_socketio import SocketIO, emit
+from flask_socketio import (
+    SocketIO,
+    close_room,
+    disconnect,
+    emit,
+    join_room,
+    leave_room,
+    send,
+)
 from loguru import logger
 
 # -------------------------
@@ -110,6 +118,17 @@ def verify_access_token(token: str):
     )
     if payload.get("typ") != "access":
         raise jwt.InvalidTokenError("Not an access token")
+    return payload
+
+
+def verify_refresh_token(token: str):
+    payload = jwt.decode(
+        token,
+        JWT_REFRESH_SECRET_KEY,
+        algorithms=[JWT_ALGORITHM],
+    )
+    if payload.get("typ") != "refresh":
+        raise jwt.InvalidTokenError("Not a refresh token")
     return payload
 
 
@@ -207,6 +226,36 @@ def signup():
         g.db.rollback()
         g.log.exception("Signup failed")
         return jsonify({"error": "Signup failed"}), 500
+
+
+@app.route("/refresh", methods=["POST"])
+def refresh_token():
+    json_data = request.get_json()
+    if not json_data:
+        g.log.error("Missing JSON data")
+        return jsonify({"error": "Missing JSON data"}), 400
+
+    token = json_data.get("refresh_token")
+    if not token:
+        g.log.error("Missing token")
+        return jsonify({"error": "Missing token"}), 400
+    g.log.info("Received refresh token", token=token)
+
+    try:
+        payload = verify_refresh_token(token)
+    except jwt.ExpiredSignatureError:
+        g.log.error("Token expired", token=token)
+        return jsonify({"error": "Token expired"}), 401
+    except jwt.InvalidTokenError:
+        g.log.error("Invalid token")
+        return jsonify({"error": "Invalid token"}), 401
+
+    if payload["typ"] != "refresh":
+        g.log.error("Invalid token type")
+        return jsonify({"error": "Invalid token type"}), 401
+
+    new_token = create_access_token(payload["sub"])
+    return jsonify({"access_token": new_token}), 200
 
 
 # -------------------------
