@@ -737,7 +737,7 @@ def socket_disconnect():
 # -------------------------
 # Run
 # -------------------------
+init_db()
 if __name__ == "__main__":
-    init_db()
     logger.info("Server started")
     socketio.run(app, host="0.0.0.0", port=5000, debug=True)
