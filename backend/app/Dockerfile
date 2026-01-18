@@ -10,8 +10,8 @@ RUN pip install -r requirements.txt
 # Now copy the rest of your application
 COPY . .
 
-#dev
-CMD ["python3", "app.py"]
+# ldev
+# CMD ["python3", "app.py"]
 
 # production
-# CMD ["gunicorn", "-k", "geventwebsocket.gunicorn.workers.GeventWebSocketWorker","-w","4","--bind","0.0.0.0:5000", "app:app"]
+CMD ["gunicorn", "-k", "geventwebsocket.gunicorn.workers.GeventWebSocketWorker","-w","4","--bind","0.0.0.0:5000", "app:app"]
