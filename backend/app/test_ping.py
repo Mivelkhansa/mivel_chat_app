@@ -1,3 +1,4 @@
+# This work is licensed under the terms of the MIT license
 from flask import Flask
 
 app = Flask(__name__)

@@ -2,15 +2,15 @@
 <html lang="en">
     <head>
         <meta charset="UTF-8" />
-        <title>Flask Socket.IO JWT Test</title>
+        <title>Chat App Full Test</title>
         <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
-
         <style>
             body {
                 font-family: monospace;
                 background: #111;
                 color: #eee;
             }
+            input,
             button {
                 margin: 4px;
             }
@@ -18,34 +18,63 @@
                 white-space: pre-wrap;
                 border: 1px solid #444;
                 padding: 10px;
-                height: 300px;
+                height: 400px;
                 overflow-y: auto;
             }
         </style>
     </head>
-
     <body>
-        <h2>Flask + Socket.IO (JWT)</h2>
+        <h2>Chat App Full Test</h2>
 
-        <label>Username: <input id="username" value="testuser" /></label><br />
-        <label
-            >Password:
-            <input id="password" type="password" value="testpass" /></label
-        ><br /><br />
+        <!-- Auth -->
+        <div>
+            <input id="username" placeholder="Username" value="testuser" />
+            <input
+                id="password"
+                type="password"
+                placeholder="Password"
+                value="testpass"
+            />
+            <button onclick="signup()">Signup</button>
+            <button onclick="login()">Login</button>
+        </div>
 
-        <button onclick="signup()">Signup</button>
-        <button onclick="login()">Login</button>
-        <button onclick="connectSocket()">Connect Socket</button><br /><br />
+        <!-- Room -->
+        <div>
+            <input id="new_room_name" placeholder="New Room Name" />
+            <button onclick="createRoom()">Create Room</button>
+            <input id="room_id" placeholder="Room ID" />
+            <button onclick="joinRoom()">Join Room</button>
+        </div>
 
-        <label>Message: <input id="message" value="Hello world" /></label>
-        <button onclick="sendMessage()">Send</button>
+        <!-- Messages -->
+        <div>
+            <input id="message" placeholder="Message" />
+            <button onclick="sendMessage()">Send</button>
+        </div>
 
+        <!-- Member management -->
+        <div>
+            <input id="member_id" placeholder="User ID" />
+            <button onclick="addMember()">Add Member</button>
+            <button onclick="removeMember()">Remove Member</button>
+            <button onclick="listMembers()">List Members</button>
+        </div>
+
+        <!-- Transfer ownership -->
+        <div>
+            <input id="new_owner" placeholder="New Owner ID" />
+            <button onclick="transferOwner()">Transfer Owner</button>
+        </div>
+
+        <h3>Current Room: <span id="current_room">None</span></h3>
         <h3>Log</h3>
         <div id="log"></div>
 
         <script>
             let socket = null;
             let accessToken = null;
+            let currentRoom = null;
 
             function log(msg) {
                 const el = document.getElementById("log");
@@ -53,6 +82,7 @@
                 el.scrollTop = el.scrollHeight;
             }
 
+            // ------------------ AUTH ------------------
             async function signup() {
                 const res = await fetch("http://localhost:5000/signup", {
                     method: "POST",
@@ -62,9 +92,7 @@
                         password: password.value,
                     }),
                 });
-
-                log(`Signup status: ${res.status}`);
-                log(await res.text());
+                log(`Signup ${res.status}: ${await res.text()}`);
             }
 
             async function login() {
@@ -76,65 +104,146 @@
                         password: password.value,
                     }),
                 });
-
                 const data = await res.json();
-                log(`Login status: ${res.status}`);
-                log(JSON.stringify(data, null, 2));
-
+                log(`Login ${res.status}: ${JSON.stringify(data)}`);
                 if (res.ok) {
                     accessToken = data.access_token;
                     log("✅ Access token stored");
                 }
             }
 
-            function connectSocket() {
-                if (!accessToken) {
-                    log("❌ Login first (no token)");
-                    return;
+            // ------------------ ROOM ------------------
+            async function createRoom() {
+                if (!accessToken) return log("❌ Login first");
+                const room_name =
+                    document.getElementById("new_room_name").value ||
+                    prompt("Room name?", "Test Room");
+                if (!room_name) return;
+                const res = await fetch("http://localhost:5000/room", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ token: accessToken, room_name }),
+                });
+                const data = await res.json();
+                log(`Create Room ${res.status}: ${JSON.stringify(data)}`);
+                if (res.ok) {
+                    currentRoom = data.room_id;
+                    document.getElementById("room_id").value = currentRoom;
+                    document.getElementById("current_room").textContent =
+                        currentRoom;
                 }
-
-                log("Connecting socket with JWT...");
-
-                socket = io("http://localhost:5000", {
-                    auth: {
-                        token: accessToken,
-                    },
-                });
-
-                socket.on("connect", () => {
-                    log("✅ Socket connected");
-                });
-
-                socket.on("disconnect", (reason) => {
-                    log(`❌ Socket disconnected (${reason})`);
-                });
-
-                socket.on("connect_error", (err) => {
-                    log("❌ Socket error:");
-                    log(err.message || err);
-                });
-
-                socket.on("old_messages", (msgs) => {
-                    log("📜 Message history:");
-                    msgs.forEach((m) => {
-                        log(`[${m.sender}] ${m.message}`);
-                    });
-                });
-
-                socket.on("new_message", (msg) => {
-                    log(`[${msg.sender}] ${msg.message}`);
-                });
             }
 
-            function sendMessage() {
-                if (!socket || !socket.connected) {
-                    log("⚠ Socket not connected");
-                    return;
-                }
+            function joinRoom() {
+                if (!accessToken) return log("❌ Login first");
+                const roomId = document.getElementById("room_id").value;
+                if (!roomId) return log("❌ Enter room ID");
+                currentRoom = roomId;
+                document.getElementById("current_room").textContent =
+                    currentRoom;
 
-                socket.emit("message", {
-                    message: message.value,
+                socket = io("http://localhost:5000");
+                socket.on("connect", () => {
+                    log("✅ Socket connected");
+                    socket.emit("join_room", {
+                        room: roomId,
+                        token: accessToken,
+                    });
                 });
+                socket.on("disconnect", (r) =>
+                    log(`❌ Socket disconnected: ${r}`),
+                );
+                socket.on("connect_error", (e) =>
+                    log("❌ Socket error: " + (e.message || e)),
+                );
+                socket.on("error", (e) =>
+                    log("❌ Socket error: " + JSON.stringify(e)),
+                );
+
+                socket.on("old_messages", (msgs) => {
+                    log("📜 Old messages:");
+                    msgs.forEach((m) =>
+                        log(`[${m.timestamp}] ${m.sender}: ${m.message}`),
+                    );
+                });
+                socket.on("new_message", (msg) =>
+                    log(`[${msg.timestamp}] ${msg.sender}: ${msg.message}`),
+                );
+            }
+
+            // ------------------ MESSAGES ------------------
+            function sendMessage() {
+                if (!socket || !socket.connected)
+                    return log("⚠ Socket not connected");
+                socket.emit("message", { message: message.value });
+            }
+
+            // ------------------ MEMBER MANAGEMENT ------------------
+            async function addMember() {
+                if (!accessToken || !currentRoom)
+                    return log("❌ Login & join room first");
+                const userId = member_id.value;
+                if (!userId) return;
+                const res = await fetch(
+                    `http://localhost:5000/room/${currentRoom}/members/${userId}`,
+                    {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ token: accessToken }),
+                    },
+                );
+                const data = await res.json();
+                log(`Add Member: ${JSON.stringify(data)}`);
+            }
+
+            async function removeMember() {
+                if (!accessToken || !currentRoom)
+                    return log("❌ Login & join room first");
+                const userId = member_id.value;
+                if (!userId) return;
+                const res = await fetch(
+                    `http://localhost:5000/room/${currentRoom}/members/${userId}`,
+                    {
+                        method: "DELETE",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ token: accessToken }),
+                    },
+                );
+                const data = await res.json();
+                log(`Remove Member: ${JSON.stringify(data)}`);
+            }
+
+            async function listMembers() {
+                if (!accessToken || !currentRoom)
+                    return log("❌ Login & join room first");
+                const res = await fetch(
+                    `http://localhost:5000/room/${currentRoom}/members/${accessToken}`,
+                    {
+                        method: "GET",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ token: accessToken }),
+                    },
+                );
+                const data = await res.json();
+                log(`Members in room: ${JSON.stringify(data)}`);
+            }
+
+            // ------------------ TRANSFER OWNERSHIP ------------------
+            async function transferOwner() {
+                if (!accessToken || !currentRoom)
+                    return log("❌ Login & join room first");
+                const newOwnerId = new_owner.value;
+                if (!newOwnerId) return;
+                const res = await fetch(
+                    `http://localhost:5000/room/${currentRoom}/transfer-owner/${newOwnerId}`,
+                    {
+                        method: "PATCH",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ token: accessToken }),
+                    },
+                );
+                const data = await res.json();
+                log(`Transfer Owner: ${JSON.stringify(data)}`);
             }
         </script>
     </body>

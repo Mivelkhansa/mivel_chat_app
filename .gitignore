@@ -1,5 +1,5 @@
 __pycache__/
 .env
+app.log
 backend/db/data/*
-backend/app/app.log
 note.txt

@@ -1,3 +1,4 @@
+# This work is licensed under the terms of the MIT license
 import os
 
 from dotenv import load_dotenv
