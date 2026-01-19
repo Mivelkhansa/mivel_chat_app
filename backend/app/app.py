@@ -5,8 +5,7 @@ import datetime
 import sys
 import time
 import uuid
-from datetime import timedelta
-from pyexpat import model
+from datetime import timedelta, timezone
 
 import bcrypt
 import jwt
@@ -26,12 +25,9 @@ from flask import Flask, g, jsonify, request
 from flask_cors import CORS
 from flask_socketio import (
     SocketIO,
-    close_room,
-    disconnect,
     emit,
     join_room,
     leave_room,
-    send,
 )
 from loguru import logger
 from models import MemberRole, Room_members
@@ -71,7 +67,7 @@ for i in range(50):
         redis_client = redis.Redis(host=REDIS_HOST, port=REDIS_PORT)
         redis_client.ping()
         break
-    except redis.exceptions.ConnectionError:
+    except redis.ConnectionError:
         print("Waiting for Redis...")
         time.sleep(1)
 else:
@@ -103,10 +99,10 @@ def create_access_token(user_id: str) -> str:
         {
             "sub": user_id,
             "typ": "access",
-            "iat": datetime.datetime.now(datetime.UTC),
-            "exp": datetime.datetime.now(datetime.UTC)
+            "iat": datetime.datetime.now(timezone.utc),
+            "exp": datetime.datetime.now(timezone.utc)
             + timedelta(seconds=JWT_ACCESS_EXPIRATION),
-            "iss": "chat_app",
+            "iss": "vally_chat_app",
         },
         JWT_ACCESS_SECRET_KEY,
         algorithm=JWT_ALGORITHM,
@@ -118,10 +114,10 @@ def create_refresh_token(user_id: str) -> str:
         {
             "sub": user_id,
             "typ": "refresh",
-            "iat": datetime.datetime.now(datetime.UTC),
-            "exp": datetime.datetime.now(datetime.UTC)
+            "iat": datetime.datetime.now(timezone.utc),
+            "exp": datetime.datetime.now(timezone.utc)
             + timedelta(seconds=JWT_REFRESH_EXPIRATION),
-            "iss": "chat_app",
+            "iss": "vally_chat_app",
         },
         JWT_REFRESH_SECRET_KEY,
         algorithm=JWT_ALGORITHM,
@@ -150,6 +146,13 @@ def verify_refresh_token(token: str):
     return payload
 
 
+def get_token_from_header():
+    auth = request.headers.get("Authorization")
+    if auth and auth.startswith("Bearer "):
+        return auth.split(" ", 1)[1]
+    return None
+
+
 # -------------------------
 # HTTP lifecycle
 # -------------------------
@@ -157,22 +160,21 @@ def verify_refresh_token(token: str):
 def start_request():
     g.request_id = str(uuid.uuid4())
     g.db = session_local()
+    g.log = logger.bind(request_id=g.request_id)
 
-    user_id = None
-    auth = request.headers.get("Authorization")
-
-    if auth and auth.startswith("Bearer "):
-        token = auth.split(" ", 1)[1]
+    token = get_token_from_header()
+    g.user_id = None
+    if token:
         try:
             payload = verify_access_token(token)
-            user_id = payload["sub"]
+            g.user_id = payload["sub"]
         except jwt.ExpiredSignatureError:
-            return jsonify({"error": "Token expired"}), 401
+            g.log.warning("Token expired for request")
         except jwt.InvalidTokenError:
-            return jsonify({"error": "Invalid token"}), 401
+            g.log.warning("Invalid token for request")
 
-    g.log = logger.bind(request_id=g.request_id, user_id=user_id)
-    g.log.trace("HTTP request started")
+    g.log = g.log.bind(user_id=g.user_id)
+    g.log.trace(f"{request.method} {request.path} started")
 
 
 @app.teardown_request
@@ -282,13 +284,29 @@ def refresh_token():
 # -------------------------
 # room management
 # -------------------------
+def get_rooms_for_user(user_id: str, db) -> list[dict]:
+    """
+    Return a list of room IDs the given user is currently connected to via Socket.IO
+    """
+    room_ids = [
+        state["room_id"]
+        for state in socket_state.values()
+        if state["user_id"] == user_id
+    ]
+
+    if not room_ids:
+        return []
+    rooms = db.query(models.Room).filter(models.Room.room_id.in_(room_ids)).all()
+    return [{"room_id": room.room_id, "room_name": room.room_name} for room in rooms]
+
+
 @app.route("/room", methods=["POST"])
 def create_room():
     data = request.get_json()
     if data is None:
         g.log.error("Invalid request data")
         return jsonify({"error": "Invalid request data"}), 400
-    token = data.get("token")
+    token = get_token_from_header()
     room_name = data.get("room_name")
 
     if not token:
@@ -296,7 +314,7 @@ def create_room():
         return jsonify({"error": "Token not provided"}), 400
 
     try:
-        payload = verify_access_token(token)
+        payload = verify_access_token(str(token))
     except jwt.ExpiredSignatureError:
         return jsonify({"error": "Token expired"}), 401
     except jwt.InvalidTokenError:
@@ -329,7 +347,7 @@ def delete_room(room_id):
     if data is None:
         g.log.error("Invalid request data")
         return jsonify({"error": "Invalid request data"}), 400
-    token = data.get("token")
+    token = get_token_from_header()
 
     if not token:
         g.log.error("Token not provided")
@@ -364,6 +382,32 @@ def delete_room(room_id):
     return jsonify({"message": "Room deleted"}), 200
 
 
+# return all rooms a user is join
+@app.route("/my-rooms", methods=["GET"])
+def my_rooms():
+    token = get_token_from_header()
+    if not token:
+        g.log.error("token is missing")
+        return jsonify({"error": "missing token"}), 400
+
+    try:
+        payload = verify_access_token(token)
+    except jwt.ExpiredSignatureError:
+        g.log.error("Token expired", token=token)
+        return jsonify({"error": "Token expired"}), 401
+    except jwt.InvalidTokenError:
+        g.log.error("Invalid token", token=token)
+        return jsonify({"error": "Invalid token"}), 401
+
+    user_id = payload["sub"]
+    try:
+        rooms = get_rooms_for_user(user_id, g.db)
+    except Exception as e:
+        g.log.error("Failed to fetch rooms", error=str(e))
+        return jsonify({"error": "Failed to fetch rooms"}), 500
+    return jsonify({"rooms": rooms}), 200
+
+
 # -------------------------
 # members management
 # -------------------------
@@ -377,7 +421,7 @@ def manage_member(room_id, user_id):
         g.log.error("Invalid request data")
         return jsonify({"error": "Invalid request data"}), 400
 
-    token = data.get("token")
+    token = get_token_from_header()
     if not token:
         g.log.warning("Unauthorized member management")
         return jsonify({"error": "Unauthorized member management"}), 403
@@ -394,11 +438,16 @@ def manage_member(room_id, user_id):
     requesting_user_id = payload["sub"]
 
     # Query the requester once
-    requester = (
-        g.db.query(models.Room_members)
-        .filter_by(user_id=requesting_user_id, room_id=room_id)
-        .first()
-    )
+    try:
+        requester = (
+            g.db.query(models.Room_members)
+            .filter_by(user_id=requesting_user_id, room_id=room_id)
+            .first()
+        )
+    except Exception as e:
+        g.log.error("Error querying requester", error=str(e))
+        return jsonify({"error": "Internal server error"}), 500
+
     if not requester:
         g.log.error(
             "Requesting user not found", user_id=requesting_user_id, room_id=room_id
@@ -431,9 +480,6 @@ def manage_member(room_id, user_id):
 
     # POST: add member (must be self)
     elif request.method == "POST":
-        if requesting_user_id != user_id:
-            g.log.warning("Unauthorized member management")
-            return jsonify({"error": "Unauthorized member management"}), 403
         try:
             g.db.add(models.Room_members(user_id=user_id, room_id=room_id))
             g.db.commit()
@@ -535,11 +581,7 @@ def manage_member(room_id, user_id):
     "/room/<string:room_id>/transfer-owner/<string:new_owner_id>", methods=["PATCH"]
 )
 def transfer_owner(room_id, new_owner_id):
-    data = request.get_json()
-    if not data:
-        g.log.warning("missing data")
-        return jsonify({"error": "missing data"}), 400
-    token = data.get("token")
+    token = get_token_from_header()
 
     if not token:
         g.log.warning("missing token")
@@ -562,27 +604,35 @@ def transfer_owner(room_id, new_owner_id):
     try:
         current_owner = (
             g.db.query(Room_members)
-            .filter(room_id=room_id, user_id=current_owner_id)
+            .filter(
+                Room_members.room_id == room_id,
+                Room_members.user_id == current_owner_id,
+            )
             .one()
         )
         if current_owner.member_role != MemberRole.OWNER:
             g.log.warning("current owner not owner", id=current_owner_id)
             return jsonify({"error": "current owner not owner"}), 403
 
-    except g.db.NoResultFound:
+    except NoResultFound:
         g.log.warning("current owner not found")
         return jsonify({"error": "current owner not found"}), 404
 
     try:
         new_owner = (
-            g.db.query(Room_members).filter(room_id=room_id, user_id=new_owner_id).one()
+            g.db.query(Room_members)
+            .filter(
+                Room_members.room_id == room_id,
+                Room_members.user_id == new_owner_id,
+            )
+            .one()
         )
         new_owner.member_role = MemberRole.OWNER
         current_owner.member_role = MemberRole.MEMBER
         g.db.commit()
         g.log.info("Ownership transferred", room_id=room_id, new_owner_id=new_owner_id)
         return jsonify({"message": "Ownership transferred"}), 200
-    except g.db.NoResultFound:
+    except NoResultFound:
         g.log.warning("new owner not found")
         return jsonify({"error": "new owner not found"}), 404
 
@@ -731,7 +781,10 @@ def socket_message(data):
 def socket_disconnect():
     state = socket_state.pop(request.sid, None)
     if state and "room_id" in state:
-        leave_room(state["room_id"])
+        for user_id in state["users"]:
+            emit("user_left", {"user_id": user_id}, room=state["room_id"])
+        for room in state["rooms"]:
+            leave_room(room)
 
 
 # -------------------------
