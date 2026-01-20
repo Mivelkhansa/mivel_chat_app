@@ -146,11 +146,22 @@ def verify_refresh_token(token: str):
     return payload
 
 
+# -------------------------
+# Helper functions
+# -------------------------
+
+
 def get_token_from_header():
     auth = request.headers.get("Authorization")
     if auth and auth.startswith("Bearer "):
         return auth.split(" ", 1)[1]
     return None
+
+
+def get_username(db, user_id: str) -> str:
+    return (
+        db.query(models.User.username).filter(models.User.user_id == user_id).scalar()
+    )
 
 
 # -------------------------
@@ -640,67 +651,110 @@ def transfer_owner(room_id, new_owner_id):
 # -------------------------
 # Socket.IO (JWT)
 # -------------------------
+
 socket_state: dict[str, dict] = {}
 
 
-@socketio.on("join_room")
-def socket_connect(data):
-    request_id = str(uuid.uuid4())
+@socketio.on("connect")
+def socket_connect(auth):
+    request_id = request.sid
+    token = None
     log = logger.bind(request_id=request_id)
-    room_id = data.get("room")
-    token = data.get("token")
-    if not token or not room_id:
-        log.warning("Socket rejected: no token or room")
-        emit("error", {"message": "Invalid token or room"})
+    if auth:
+        token = auth.get("token")
+
+    if not token:
+        log.error("Missing token")
         return False
 
     try:
         payload = verify_access_token(token)
     except jwt.ExpiredSignatureError:
-        log.warning("Socket rejected: token expired")
-        emit("error", {"message": "Token expired"})
+        log.warning("Token expired")
         return False
     except jwt.InvalidTokenError:
-        log.warning("Socket rejected: invalid token")
-        emit("error", {"message": "Invalid token"})
+        log.error("Invalid token")
         return False
+
     user_id = payload["sub"]
     db = session_local()
 
     try:
-        user = (
-            db.query(models.Room_members)
-            .filter_by(user_id=user_id, room_id=room_id)
-            .first()
-        )
-        if not user:
-            log.warning("Socket rejected: user not found")
-            emit("error", {"message": "User not found"})
-            return False
-        if user.member_role in [MemberRole.BANNED]:
-            log.warning("Socket rejected: user is banned", user_id=user_id)
-            emit("error", {"message": "User is banned"})
-            return False
-    except SQLAlchemyError as e:
+        username = get_username(db, user_id)
+    except Exception as e:
         db.rollback()
-        log.error("Socket rejected: error querying user", error=str(e))
-        emit("error", {"message": "Error querying user"})
+        log.error("Failed to get username", error=str(e))
         return False
+    finally:
+        db.close()
+
+    socket_state[request.sid] = {
+        "user_id": user_id,
+        "username": username,
+        "rooms": set(),
+    }
+
+    log.info("Socket connected", user_id=user_id)
+
+
+@socketio.on("join_rooms")
+def join_rooms(data):
+    request_id = request.sid
+    log = logger.bind(request_id=request_id)
+    state = socket_state.get(request_id)
+    if not state:
+        log.error("Unauthorized")
+        emit("error", {"error": "Unauthorized"})
+        return
+
+    room_ids = data.get("rooms", [])
+    db = session_local()
 
     try:
-        username = (
-            db.query(models.User.username)
-            .filter(models.User.user_id == payload["sub"])
-            .scalar()
+        allowed_rooms = (
+            db.query(models.Room_members.room_id)
+            .filter(
+                models.Room_members.user_id == state["user_id"],
+                models.Room_members.room_id.in_(room_ids),
+                models.Room_members.member_role != MemberRole.BANNED,
+            )
+            .all()
         )
+        for room_id in allowed_rooms:
+            join_room(room_id)
+            state["rooms"].add(room_id)
+
+        emit("joined_rooms", {"rooms": list(state["rooms"])})
+    except Exception as e:
+        db.rollback()
+        log.error("Failed to join rooms", error=str(e))
+        emit("error", {"error": "Failed to join rooms"})
+    finally:
+        db.close()
+
+
+@socketio.on("fetch_history")
+def fetch_history(data):
+    state = socket_state.get(request.sid)
+    room_id = data.get("room")
+    log = logger.bind(room_id=room_id, request_id=request.sid)
+
+    if not state or room_id not in state["rooms"]:
+        emit("error", {"error": "Not in room"})
+        return
+
+    db = session_local()
+
+    try:
         msgs_query = (
             db.query(models.Message, models.User.username)
             .join(models.User, models.Message.sender == models.User.user_id)
             .filter(models.Message.room_id == room_id)
-            .order_by(models.Message.id.asc())
+            .order_by(models.Message.id.desc())
             .limit(100)
             .all()
         )
+
         msgs = [
             {
                 "sender": sender,
@@ -709,82 +763,81 @@ def socket_connect(data):
                 "message": msg.message,
                 "timestamp": msg.date_created.isoformat(),
             }
-            for msg, sender in msgs_query
+            for msg, sender in reversed(msgs_query)
         ]
-        emit("old_messages", msgs)
-    except NoResultFound as e:
-        log.error("message not found: %s", str(e))
-        return False
-    except SQLAlchemyError as e:
-        log.error("Failed to fetch messages: %s", str(e))
-        return False
+
+        emit("old_messages", {"room": room_id, "messages": msgs})
+    except Exception as e:
+        db.rollback()
+        log.error("Failed to fetch history", error=str(e))
+        emit("error", {"error": "Failed to fetch history"})
     finally:
         db.close()
-    join_room(room_id)
-    socket_state[request.sid] = {
-        "user_id": payload["sub"],
-        "username": username,
-        "request_id": request_id,
-        "room_id": room_id,
-    }
-    log.bind(user_id=payload["sub"]).info("Socket connected")
 
 
-@socketio.on("message")
-def socket_message(data):
+@socketio.on("send_message")
+def send_message(data):
     state = socket_state.get(request.sid)
-    if not state:
-        emit("error", {"error": "Unauthorized"})
+    room_id = data.get("room")
+    message = data.get("message")
+
+    if not state or room_id not in state["rooms"]:
+        emit("error", {"error": "Not in room"})
         return
 
-    user_id = state["user_id"]
-    username = state["username"]
-    log = logger.bind(
-        request_id=state["request_id"],
-        user_id=user_id,
-    )
-
-    message = data.get("message")
     if not message:
-        emit("error", {"error": "Message required"})
+        emit("error", {"error": "Empty message"})
         return
 
     db = session_local()
+
     try:
-        new_msg = models.Message(
-            sender=user_id, message=message, room_id=state["room_id"]
+        msg = models.Message(
+            sender=state["user_id"],
+            room_id=room_id,
+            message=message,
         )
-        db.add(new_msg)
+        db.add(msg)
         db.commit()
-        db.refresh(new_msg)
-        emit(
-            "new_message",
-            {
-                "sender_id": new_msg.sender,
-                "sender": username,
-                "message_id": new_msg.id,
-                "message": message,
-                "timestamp": new_msg.date_updated.isoformat(),
-            },
-            room=state["room_id"],
-            include_self=True,
-        )
-    except SQLAlchemyError as e:
+        db.refresh(msg)
+
+        payload = {
+            "room": room_id,
+            "sender": state["username"],
+            "sender_id": state["user_id"],
+            "message_id": msg.id,
+            "message": message,
+            "timestamp": msg.date_created.isoformat(),
+        }
+
+        emit("new_message", payload, room=room_id)
+
+    except SQLAlchemyError:
         db.rollback()
-        log.error("Message save failed", error=str(e))
         emit("error", {"error": "DB error"})
     finally:
         db.close()
 
 
+@socketio.on("leave_room")
+def leave_room_handler(data):
+    state = socket_state.get(request.sid)
+    room_id = data.get("room")
+
+    if not state or room_id not in state["rooms"]:
+        return
+
+    leave_room(room_id)
+    state["rooms"].remove(room_id)
+
+
 @socketio.on("disconnect")
 def socket_disconnect():
     state = socket_state.pop(request.sid, None)
-    if state and "room_id" in state:
-        for user_id in state["users"]:
-            emit("user_left", {"user_id": user_id}, room=state["room_id"])
-        for room in state["rooms"]:
-            leave_room(room)
+    if not state:
+        return
+
+    logger.info("Socket disconnected", user_id=state["user_id"])
 
 
 # -------------------------
