@@ -296,19 +296,13 @@ def refresh_token():
 # room management
 # -------------------------
 def get_rooms_for_user(user_id: str, db) -> list[dict]:
-    """
-    Return a list of room IDs the given user is currently connected to via Socket.IO
-    """
-    room_ids = [
-        state["room_id"]
-        for state in socket_state.values()
-        if state["user_id"] == user_id
-    ]
-
-    if not room_ids:
-        return []
-    rooms = db.query(models.Room).filter(models.Room.room_id.in_(room_ids)).all()
-    return [{"room_id": room.room_id, "room_name": room.room_name} for room in rooms]
+    rooms = (
+        db.query(models.Room.room_id, models.Room.room_name)
+        .join(models.Room_members, models.Room.room_id == models.Room_members.room_id)
+        .filter(models.Room_members.user_id == user_id)
+        .all()
+    )
+    return [{"room_id": r, "room_name": n} for r, n in rooms]
 
 
 @app.route("/room", methods=["POST"])
@@ -707,7 +701,7 @@ def join_rooms(data):
         emit("error", {"error": "Unauthorized"})
         return
 
-    room_ids = data.get("rooms", [])
+    room_ids = data.get("room_ids", [])
     db = session_local()
 
     try:
@@ -720,7 +714,7 @@ def join_rooms(data):
             )
             .all()
         )
-        for room_id in allowed_rooms:
+        for (room_id,) in allowed_rooms:
             join_room(room_id)
             state["rooms"].add(room_id)
 
@@ -838,6 +832,12 @@ def socket_disconnect():
         return
 
     logger.info("Socket disconnected", user_id=state["user_id"])
+
+
+@socketio.on_error_default
+def socket_error_handler(error):
+    socket_state.pop(request.sid, None)
+    logger.error("Socket error", error=error)
 
 
 # -------------------------
