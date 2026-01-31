@@ -45,6 +45,9 @@ class Room(Base):
         String(24), primary_key=True, nullable=False, unique=True, default=cuid.generate
     )
     room_name = Column(String(255), nullable=False, unique=False)
+    room_description = Column(
+        String(255), nullable=False, unique=False, default="A room"
+    )
     date_created = Column(DateTime, default=datetime.now(timezone.utc))
     date_updated = Column(
         DateTime,

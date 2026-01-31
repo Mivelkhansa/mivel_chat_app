@@ -1,0 +1,279 @@
+body {
+    font-family: Arial, sans-serif;
+    margin: 0;
+    padding: 0;
+    background-color: #0b141a;
+    color: #e9edef;
+}
+#app {
+    display: flex;
+    flex-direction: column;
+    height: 100vh;
+}
+#top-bar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+#left-bar {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    color: #e9edef;
+    min-width: 0;
+    padding: 10px;
+}
+
+#back-button {
+    width: 19px;
+    height: 19px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+    color: #e9edef;
+    margin-right: 10px;
+    margin-left: 10px;
+}
+
+#back-button img {
+    width: 100%;
+    height: 100%;
+}
+
+#room-name {
+    font-size: 1.7rem;
+    font-weight: bold;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+#right-bar {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    padding-right: 25px;
+}
+
+#right-bar #settings-button {
+    width: 19px;
+    height: 19px;
+    margin-left: 10px;
+}
+
+#chat-container {
+    flex: 1;
+    overflow-y: auto;
+    font-size: 1.2rem;
+    padding: 5px;
+}
+
+#user-info {
+    display: flex;
+    align-items: center;
+    padding-right: 25px;
+}
+
+#logo {
+    display: flex;
+    flex-direction: row;
+    justify-content: center;
+    align-items: center;
+    font-size: 1.7rem;
+    font-weight: bold;
+    padding-left: 13px;
+}
+
+.message {
+    display: flex;
+    margin-bottom: 10px;
+}
+
+.message img {
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    margin-right: 10px;
+}
+
+.message .content {
+    width: fit-content;
+    max-width: 70%;
+    background-color: #202c33;
+    border-radius: 10px;
+    padding: 5px;
+    white-space: normal;
+    overflow-wrap: break-word;
+    word-break: break-word;
+}
+
+.message .content .username {
+    font-weight: bold;
+    margin-right: 5px;
+}
+
+.message .content .timestamp {
+    font-size: 0.8rem;
+    color: #999;
+}
+
+.message .content p {
+    margin: 5px;
+}
+
+#input-bar {
+    display: flex;
+    flex-direction: row;
+    gap: 10px;
+}
+
+#send-button {
+    width: 48px;
+    height: 48px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+    border: none;
+    border-radius: 50%;
+    background-color: #00a884;
+    cursor: pointer;
+}
+
+#send-button:hover {
+    background-color: #007764;
+}
+
+#send-button img {
+    width: 22px;
+    height: 22px;
+}
+
+#message-input {
+    flex: 1;
+    padding: 12px 14px;
+    border-radius: 3000px;
+    border: none;
+    outline: none;
+    background: #202c33;
+    color: #e9edef;
+    font-size: 1rem;
+    resize: none;
+    overflow-y: hidden;
+    line-height: 1.5;
+    height: 24px;
+    min-height: 24px;
+    max-height: 120px;
+    word-spacing: -3px;
+}
+.message.my-message {
+    display: flex;
+    justify-content: flex-end;
+    color: #fff;
+    border-radius: 10px;
+    margin-bottom: 10px;
+    text-align: left;
+}
+
+.message.my-message .content {
+    padding: 5px;
+    border-radius: 10px;
+    background-color: #007764;
+    position: relative;
+}
+
+.message.my-message .content p {
+    margin: 5px;
+}
+
+.message.my-message .content .timestamp {
+    color: #fff;
+    margin-bottom: 5px;
+    margin-left: 3px;
+}
+
+#room-list {
+    flex: 1; /* take remaining height */
+    overflow-y: auto; /* scroll if too long */
+    padding: 10px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.room {
+    background-color: #202c33;
+    padding: 12px 15px;
+    border-radius: 10px;
+    cursor: pointer;
+    transition: background-color 0.2s;
+}
+
+.room:hover {
+    background-color: #007764; /* highlight on hover */
+    color: #202c33;
+}
+
+.room-name {
+    font-weight: bold;
+    font-size: 1.2rem;
+}
+.room:hover .room-name:hover {
+    color: #202c33;
+}
+
+.room-description {
+    font-size: 0.9rem;
+    color: #999;
+    margin-top: 2px;
+}
+
+.room:hover .room-description {
+    color: #202c33;
+}
+
+.room:hover .room-name {
+    color: #202c33;
+}
+
+.room:hover .room-description {
+    color: #202c33;
+}
+
+#bottom-bar {
+    position: fixed; /* float above everything */
+    bottom: 20px; /* distance from bottom */
+    right: 20px; /* distance from right */
+    height: auto; /* only as tall as content */
+    padding: 0;
+    background: transparent; /* invisible bar */
+    pointer-events: none; /* let clicks pass through bar except button */
+    z-index: 100; /* above chat list */
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+}
+
+#bottom-bar #add-room {
+    width: 50px;
+    height: 50px;
+    border-radius: 20%;
+    background-color: #007764;
+    color: #fff;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    pointer-events: auto; /* allow clicks */
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3); /* optional: floating effect */
+}
+#bottom-bar #add-room img {
+    height: 30px;
+    width: 30px;
+}
+
+#bottom-bar #add-room:hover {
+    background-color: #202c33;
+}

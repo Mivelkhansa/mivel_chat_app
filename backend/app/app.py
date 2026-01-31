@@ -34,6 +34,12 @@ from models import MemberRole, Room_members
 from sqlalchemy.exc import NoResultFound, SQLAlchemyError
 
 # -------------------------
+# constants
+# -------------------------
+MAX_MESSAGE_LENGTH = 2000
+
+
+# -------------------------
 # App & Socket.IO
 # -------------------------
 app = Flask(__name__)
@@ -297,12 +303,14 @@ def refresh_token():
 # -------------------------
 def get_rooms_for_user(user_id: str, db) -> list[dict]:
     rooms = (
-        db.query(models.Room.room_id, models.Room.room_name)
+        db.query(
+            models.Room.room_id, models.Room.room_name, models.Room.room_description
+        )
         .join(models.Room_members, models.Room.room_id == models.Room_members.room_id)
         .filter(models.Room_members.user_id == user_id)
         .all()
     )
-    return [{"room_id": r, "room_name": n} for r, n in rooms]
+    return [{"room_id": r, "room_name": n, "room_description": d} for r, n, d in rooms]
 
 
 @app.route("/room", methods=["POST"])
@@ -313,10 +321,15 @@ def create_room():
         return jsonify({"error": "Invalid request data"}), 400
     token = get_token_from_header()
     room_name = data.get("room_name")
+    room_description = data.get("room_description", "")
 
     if not token:
         g.log.error("Token not provided")
         return jsonify({"error": "Token not provided"}), 400
+
+    if not room_name:
+        g.log.error("Room name not provided")
+        return jsonify({"error": "Room name not provided"}), 400
 
     try:
         payload = verify_access_token(str(token))
@@ -326,7 +339,7 @@ def create_room():
         return jsonify({"error": "Invalid token"}), 401
 
     try:
-        room = models.Room(room_name=room_name)
+        room = models.Room(room_name=room_name, room_description=room_description)
         g.db.add(room)
         g.db.flush()
         g.db.add(
@@ -387,6 +400,66 @@ def delete_room(room_id):
     return jsonify({"message": "Room deleted"}), 200
 
 
+@app.route("/room/<string:room_id>", methods=["PATCH"])
+def update_room(room_id):
+    token = get_token_from_header()
+    data = request.get_json()
+    if not token:
+        g.log.error("token is missing")
+        return jsonify({"error": "missing token"}), 400
+
+    if request.method != "PATCH":
+        g.log.error("Wrong method")
+        return jsonify({"error": "Wrong method"}), 400
+
+    try:
+        payload = verify_access_token(token)
+    except jwt.ExpiredSignatureError:
+        g.log.error("Token expired", token=token)
+        return jsonify({"error": "Token expired"}), 401
+    except jwt.InvalidTokenError:
+        g.log.error("Invalid token", token=token)
+        return jsonify({"error": "Invalid token"}), 401
+    try:
+        result = (
+            g.db.query(models.User, models.Room_members)
+            .join(
+                models.Room_members, models.User.user_id == models.Room_members.user_id
+            )
+            .filter(
+                models.User.user_id == payload["sub"],
+                models.Room_members.room_id == room_id,
+            )
+            .first()
+        )
+        if not result:
+            g.log.warning("unauthorized room update", token=token, room_id=room_id)
+            return jsonify({"error": "unauthorized room update"}), 403
+
+        user_obj, membership = result
+
+        if membership.member_role not in [MemberRole.ADMIN, MemberRole.OWNER]:
+            g.log.warning("unauthorized room update", token=token, room_id=room_id)
+            return jsonify({"error": "unauthorized room update"}), 403
+
+        room = g.db.query(models.Room).filter(models.Room.room_id == room_id).first()
+        if not room:
+            g.log.warning("room not found", token=token, room_id=room_id)
+            return jsonify({"error": "room not found"}), 404
+        room_name = data.get("room_name")
+        room_description = data.get("room_description", "A room")
+        if room_name:
+            room.room_name = room_name
+        if room_description:
+            room.room_description = room_description
+        g.db.commit()
+        return jsonify({"message": "room updated"}), 200
+    except SQLAlchemyError as e:
+        g.db.rollback()
+        g.log.error("Integrity error", token=token, room_id=room_id, error=str(e))
+        return jsonify({"error": "Integrity error"}), 400
+
+
 # return all rooms a user is join
 @app.route("/my-rooms", methods=["GET"])
 def my_rooms():
@@ -406,11 +479,25 @@ def my_rooms():
 
     user_id = payload["sub"]
     try:
-        rooms = get_rooms_for_user(user_id, g.db)
+        rooms = (
+            g.db.query(
+                models.Room.room_id, models.Room.room_name, models.Room.room_description
+            )
+            .join(
+                models.Room_members, models.Room.room_id == models.Room_members.room_id
+            )
+            .filter(models.Room_members.user_id == user_id)
+            .all()
+        )
+        rooms_list = [
+            {"room_id": r, "room_name": n, "room_description": d} for r, n, d in rooms
+        ]
+        g.log.info("Fetched user rooms", user_id=user_id, count=len(rooms_list))
     except Exception as e:
         g.log.error("Failed to fetch rooms", error=str(e))
         return jsonify({"error": "Failed to fetch rooms"}), 500
-    return jsonify({"rooms": rooms}), 200
+
+    return jsonify({"rooms": rooms_list}), 200
 
 
 # -------------------------
@@ -781,6 +868,10 @@ def send_message(data):
 
     if not message:
         emit("error", {"error": "Empty message"})
+        return
+
+    if len(message) > MAX_MESSAGE_LENGTH:
+        emit("error", {"error": "Message too long"})
         return
 
     db = session_local()
