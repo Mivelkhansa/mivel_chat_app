@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="en">
+    <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <title>Velly Chat App</title>
+        <meta name="description" content="A simple chat application." />
+        <meta name="keywords" content="Chat, frontend, html, css, javascript" />
+        <link rel="stylesheet" href="style/style.css" />
+        <link rel="icon" href="favicon.ico" type="image/x-icon" />
+    </head>
+    <body>
+        <div id="app">
+            <div id="top-bar">
+                <div id="left-bar">
+                    <img
+                        id="back-button"
+                        src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAGAAAABgCAYAAADimHc4AAAACXBIWXMAAAsTAAALEwEAmpwYAAACBElEQVR4nO3dv2oUYRiF8dWoRYiFhVUabQyIuQM7a+1s0+QC0llb2uYWLJNGsFUbvQMrKyPERsRCiRBEH9EsBoL/9mOy5/1mn1+5yzLz7jA758wOM5OJJEmSJEmSpF+A68D541c0F8AycB84BO7NZ6n6CbgN7HHsALh69K5ODbAK7PJ7j05vyQsOOAdsAZ/4uzvpdR0d4Cbwkv/zBlhJr/MoAJeAbeArs3mQXveuAWeATeA9bZ4BS+k5ugSsAU8bv/gP0+PE2fQcvWf6WX0DHgKX03OMJdPP4hVwKz3DGDP9vxxM95gL6TnGnOn/5DFwJT3HImT6k/aBjfQMi5bpf/gy/ezF9By9ZvoN4B1tXgDr6Tm6hJk+AzN9Dmb6DMz0GZjpczDTZ2Cm7zbTPwdupOfoErA+LUUtzPStMNPnYKbPMNOHmOn7zvR3k+vfLTN9iJk+yEwfYqYPMtOHmOnD3ABF+BNUgAfhIrxcpAAvmCrCUxFF+Ad7AZ6OLsLuUAR2hzzsDjVgd8jD7lADdocasDvkYXcYRXf4bHcYtju8btwQdochYHeoAbgGPGncG+wOQ7A7FIHdYRTd4a3dYdju8LFxQ9gdBuwOO40bwe4wFLtDAdgdasDukIc3bq0Bb11cgzfv7qs7ePv6YHfwAQ7B7uAjTObNh/gU4WOsJEmSJEmSNBnAd4xhNAtPQ6i2AAAAAElFTkSuQmCC"
+                        alt="less-than"
+                    />
+                    <span id="room-name">Velly-chat</span>
+                </div>
+                <div id="right-bar">
+                    <img
+                        id="settings-button"
+                        src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABgAAAAYCAYAAADgdz34AAAACXBIWXMAAAsTAAALEwEAmpwYAAABEElEQVR4nOWUz00CURDGV8+yBu0C79QBIe6VCoQqxAbgCjaANYBVcCPBmFgAcsOfmTAkZJmZgD4JiV/yLvu+P5v5difL/gWALvvopAx4NgJGqczvgLkRIM9qx5pdABNgDNwDA+ALH3LXV65opsBlFNDm92h75lfAe4KADyC3Ah4D0QJoARU9DWAW8HtWgIg+HfMbg1/VuzLEo+mNqQ6sSoJW0JmUuwvR1t2SVbQsiSoBNy9xl6H5DwKujwpwRtQI+MXBIwpKnkmhBv8WeHNK3n8p+bTwsdBCcz2FY77F0+l/tD9fFTvLThbWi46hD6wDs7VyCtW8hsvOAlBLtq6DkJERMExinm0COkbAQ7KAs8Y3aSD5YYFkBxMAAAAASUVORK5CYII="
+                        alt="settings"
+                    />
+                </div>
+            </div>
+            <div id="chat-container">
+                <div class="message">
+                    <div class="content">
+                        <span class="username">John</span>
+                        <span class="timestamp">12:34 PM</span>
+                        <p>Hello, Jane!</p>
+                    </div>
+                </div>
+                <div class="message">
+                    <div class="content">
+                        <span class="username">Jane</span>
+                        <span class="timestamp">12:34 PM</span>
+                        <p>
+                            Hello,
+                            JdCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCohn!
+                        </p>
+                    </div>
+                </div>
+                <div class="message my-message">
+                    <div class="content">
+                        <span class="timestamp">12:34 PM</span>
+                        <p>The quick brown fox, jumps over the lazy dog</p>
+                    </div>
+                </div>
+            </div>
+            <div id="input-bar">
+                <textarea
+                    id="message-input"
+                    type="textarea"
+                    placeholder="Type your message..."
+                ></textarea>
+                <button id="send-button">
+                    <img src="icon/icons8-sent-24.png" alt="Send" />
+                </button>
+            </div>
+        </div>
+        <script src="src/index.js" defer></script>
+    </body>
+</html>

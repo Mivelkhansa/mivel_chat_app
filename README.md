@@ -1,4 +1,4 @@
-# mivel_chatApp
+# Vally_chat_App
 A fast, simple, and modern chat application built with flask.
 
 ## ✨ Features
