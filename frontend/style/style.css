@@ -585,3 +585,72 @@ input:checked + .slider:before {
 #signup-open:hover {
     text-decoration: underline;
 }
+
+#logout-button {
+    border: none;
+    background: #007764;
+    color: #fff;
+    border-radius: 8px;
+    padding: 6px 10px;
+    cursor: pointer;
+}
+
+.username-badge {
+    margin-right: 10px;
+    color: #999;
+}
+
+.overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.6);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 9999;
+}
+
+.auth-modal {
+    background: #1e1e1e;
+    color: #e9edef;
+    padding: 20px;
+    border-radius: 12px;
+    min-width: 320px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.auth-modal input {
+    padding: 10px;
+    border-radius: 8px;
+    border: none;
+    background: #202c33;
+    color: #e9edef;
+}
+
+.auth-modal .actions {
+    display: flex;
+    gap: 10px;
+}
+
+.auth-modal .actions button,
+.auth-switch {
+    border: none;
+    background: #007764;
+    color: white;
+    border-radius: 8px;
+    padding: 8px 12px;
+    cursor: pointer;
+}
+
+.auth-switch {
+    background: transparent;
+    color: #00a884;
+    text-align: left;
+    padding-left: 0;
+}
+
+.empty-state {
+    color: #999;
+}
