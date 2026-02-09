@@ -1,0 +1,30 @@
+export const joinRoomPopupTemplate = () => `
+<div id="join-room-popup-overlay" class="popup-overlay hidden">
+    <div class="popup-content">
+        <!-- Header with Close button -->
+        <div class="popup-header">
+            <h2>Join Room</h2>
+            <button id="join-room-popup-close" class="close-btn">✕</button>
+        </div>
+
+        <!-- Fields for joining room -->
+        <div id="join-room-fields">
+            <input id="room-id" placeholder="Room ID" />
+            <input
+                id="room-password"
+                type="password"
+                placeholder="Password (optional)"
+            />
+        </div>
+
+        <!-- Action buttons -->
+        <div class="popup-buttons">
+            <button id="join-room-submit">Join Room</button>
+            <!-- Switch to Create Room -->
+            <button id="switch-to-create" class="switch-btn">
+                Switch to Create Room
+            </button>
+        </div>
+    </div>
+</div>
+`;
