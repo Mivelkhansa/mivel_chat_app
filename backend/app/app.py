@@ -219,12 +219,15 @@ def ping():
 # -------------------------
 @app.route("/login", methods=["POST"])
 def login():
-    data = request.get_json()
-    if data is None:
-        g.log.error("Invalid request data")
-        return jsonify({"error": "Invalid request data"}), 400
+    data = request.get_json(silent=True) or {}
     username = data.get("username")
+    if not username:
+        g.log.error("Username not provided")
+        return jsonify({"error": "Username not provided"}), 400
     password = data.get("password")
+    if not password:
+        g.log.error("Password not provided")
+        return jsonify({"error": "Password not provided"}), 400
 
     g.log.trace("Login attempt", username=username)
 
@@ -315,12 +318,13 @@ def get_rooms_for_user(user_id: str, db) -> list[dict]:
 
 @app.route("/room", methods=["POST"])
 def create_room():
-    data = request.get_json()
-    if data is None:
-        g.log.error("Invalid request data")
-        return jsonify({"error": "Invalid request data"}), 400
     token = get_token_from_header()
+    data = request.get_json(silent=True) or {}
     room_name = data.get("room_name")
+    if not room_name:
+        g.log.error("Room name not provided")
+        return jsonify({"error": "Room name not provided"}), 400
+
     room_description = data.get("room_description", "")
 
     if not token:
@@ -361,10 +365,6 @@ def create_room():
 
 @app.route("/room/<string:room_id>", methods=["DELETE"])
 def delete_room(room_id):
-    data = request.get_json()
-    if data is None:
-        g.log.error("Invalid request data")
-        return jsonify({"error": "Invalid request data"}), 400
     token = get_token_from_header()
 
     if not token:
@@ -381,7 +381,11 @@ def delete_room(room_id):
         return jsonify({"error": "Invalid token"}), 401
 
     try:
-        member = g.db.query(models.Room_members).filter_by(room_id=room_id).first()
+        member = (
+            g.db.query(models.Room_members)
+            .filter_by(room_id=room_id, user_id=user_id)
+            .first()
+        )
         room = g.db.query(models.Room).filter_by(room_id=room_id).first()
         if not room:
             g.log.warning("room not found", token=token)
@@ -489,9 +493,7 @@ def my_rooms():
             .filter(models.Room_members.user_id == user_id)
             .all()
         )
-        rooms_list = [
-            {"room_id": r, "room_name": n, "room_description": d} for r, n, d in rooms
-        ]
+        rooms_list = [{"id": r, "name": n, "description": d} for r, n, d in rooms]
         g.log.info("Fetched user rooms", user_id=user_id, count=len(rooms_list))
     except Exception as e:
         g.log.error("Failed to fetch rooms", error=str(e))
@@ -508,11 +510,6 @@ def my_rooms():
     methods=["GET", "POST", "DELETE", "PATCH"],
 )
 def manage_member(room_id, user_id):
-    data = request.get_json()
-    if data is None:
-        g.log.error("Invalid request data")
-        return jsonify({"error": "Invalid request data"}), 400
-
     token = get_token_from_header()
     if not token:
         g.log.warning("Unauthorized member management")
@@ -540,7 +537,7 @@ def manage_member(room_id, user_id):
         g.log.error("Error querying requester", error=str(e))
         return jsonify({"error": "Internal server error"}), 500
 
-    if not requester:
+    if request.method != "POST" and not requester:
         g.log.error(
             "Requesting user not found", user_id=requesting_user_id, room_id=room_id
         )
@@ -572,8 +569,21 @@ def manage_member(room_id, user_id):
 
     # POST: add member (must be self)
     elif request.method == "POST":
+        if user_id != requesting_user_id:
+            return jsonify({"error": "You can only join as yourself"}), 403
+
+        exists = (
+            g.db.query(models.Room_members)
+            .filter_by(user_id=user_id, room_id=room_id)
+            .first()
+        )
+        if exists:
+            return jsonify({"error": "Already a member"}), 409
+        new_member = models.Room_members(
+            user_id=user_id, room_id=room_id, member_role=MemberRole.MEMBER
+        )
         try:
-            g.db.add(models.Room_members(user_id=user_id, room_id=room_id))
+            g.db.add(new_member)
             g.db.commit()
             g.log.info("Member added", user_id=user_id, room_id=room_id)
             return jsonify({"message": "Member added"}), 200
@@ -583,6 +593,7 @@ def manage_member(room_id, user_id):
             return jsonify({"error": "Failed to add member"}), 500
 
     # DELETE: remove member
+    # Self-leave (allowed for everyone except owner)
     elif request.method == "DELETE":
         try:
             member = (
@@ -590,21 +601,34 @@ def manage_member(room_id, user_id):
                 .filter_by(user_id=user_id, room_id=room_id)
                 .first()
             )
+
             if not member:
                 g.log.error("Member not found", user_id=user_id, room_id=room_id)
                 return jsonify({"error": "Member not found"}), 404
 
             # Only OWNER or ADMIN can remove members
-            if requester.member_role not in [MemberRole.OWNER, MemberRole.ADMIN]:
-                g.log.error("Not allowed to remove member", user_id=requesting_user_id)
-                return jsonify({"error": "Not allowed"}), 403
+            if user_id == requester.user_id:
+                if member.member_role == MemberRole.OWNER:
+                    return jsonify(
+                        {"error": "Owner must transfer ownership or delete room"}
+                    ), 403
+                try:
+                    g.db.delete(member)
+                    g.db.commit()
+                    return jsonify({"message": "Member deleted"}), 200
+                except Exception as e:
+                    g.log.error("Failed to delete member", error=str(e))
+                    return jsonify({"error": "Failed to delete member"}), 500
+            # member couldnt remove admin
+            if requester.member_role not in [MemberRole.ADMIN, MemberRole.OWNER]:
+                return jsonify(
+                    {"error": "Only admins or owners can remove members"}
+                ), 403
 
-            # Admins cannot remove owner
             if (
                 member.member_role == MemberRole.OWNER
                 and requester.member_role != MemberRole.OWNER
             ):
-                g.log.warning("Cannot remove owner", user_id=user_id)
                 return jsonify({"error": "Cannot remove owner"}), 403
 
             g.db.delete(member)
@@ -617,6 +641,24 @@ def manage_member(room_id, user_id):
 
     # PATCH: update member role
     elif request.method == "PATCH":
+        data = request.get_json(silent=True) or {}
+        new_role = data.get("role")
+        if not new_role:
+            g.log.error("Missing role", user_id=user_id, room_id=room_id)
+            return jsonify({"error": "Missing role"}), 400
+        try:
+            new_role_enum = MemberRole(new_role)
+        except ValueError:
+            g.log.error("Invalid role", user_id=user_id, room_id=room_id, role=new_role)
+            return jsonify({"error": "Invalid role"}), 400
+
+        if (
+            new_role_enum == MemberRole.OWNER
+            and requester.member_role != MemberRole.OWNER
+        ):
+            g.log.error("Cannot change role to OWNER", user_id=user_id, room_id=room_id)
+            return jsonify({"error": "Cannot change role to OWNER"}), 400
+
         try:
             member = (
                 g.db.query(models.Room_members)

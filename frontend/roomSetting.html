@@ -1,0 +1,116 @@
+<!doctype html>
+<html lang="en">
+    <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <title>Velly Chat App</title>
+        <meta name="description" content="A simple chat application." />
+        <meta
+            name="keywords"
+            content="Chat, frontend, app, mobile, desktop, modern"
+        />
+        <link rel="stylesheet" href="style/style.css" />
+        <link rel="icon" href="favicon.ico" type="image/x-icon" />
+    </head>
+    <body>
+        <div id="app">
+            <div id="top-bar">
+                <div id="left-bar">
+                    <img
+                        id="back-button"
+                        src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAGAAAABgCAYAAADimHc4AAAACXBIWXMAAAsTAAALEwEAmpwYAAACBElEQVR4nO3dv2oUYRiF8dWoRYiFhVUabQyIuQM7a+1s0+QC0llb2uYWLJNGsFUbvQMrKyPERsRCiRBEH9EsBoL/9mOy5/1mn1+5yzLz7jA758wOM5OJJEmSJEmSpF+A68D541c0F8AycB84BO7NZ6n6CbgN7HHsALh69K5ODbAK7PJ7j05vyQsOOAdsAZ/4uzvpdR0d4Cbwkv/zBlhJr/MoAJeAbeArs3mQXveuAWeATeA9bZ4BS+k5ugSsAU8bv/gP0+PE2fQcvWf6WX0DHgKX03OMJdPP4hVwKz3DGDP9vxxM95gL6TnGnOn/5DFwJT3HImT6k/aBjfQMi5bpf/gy/ezF9By9ZvoN4B1tXgDr6Tm6hJk+AzN9Dmb6DMz0GZjpczDTZ2Cm7zbTPwdupOfoErA+LUUtzPStMNPnYKbPMNOHmOn7zvR3k+vfLTN9iJk+yEwfYqYPMtOHmOnD3ABF+BNUgAfhIrxcpAAvmCrCUxFF+Ad7AZ6OLsLuUAR2hzzsDjVgd8jD7lADdocasDvkYXcYRXf4bHcYtju8btwQdochYHeoAbgGPGncG+wOQ7A7FIHdYRTd4a3dYdju8LFxQ9gdBuwOO40bwe4wFLtDAdgdasDukIc3bq0Bb11cgzfv7qs7ePv6YHfwAQ7B7uAjTObNh/gU4WOsJEmSJEmSNBnAd4xhNAtPQ6i2AAAAAElFTkSuQmCC"
+                        alt="less-than"
+                    />
+                    <span id="Settings">Settings</span>
+                </div>
+            </div>
+            <div id="settings-container">
+                <h2>Settings</h2>
+
+                <ul class="settings-list">
+                    <li>
+                        <div id="room-id-container">
+                            <span>room-id:</span>
+                            <span id="room-id-display"
+                                >123456789012345678901234</span
+                            >
+                        </div>
+                        <button id="copy-room-id">Copy</button>
+                    </li>
+                    <li>
+                        <div>
+                            <span>Room name:</span>
+                            <span id="room-name-display">programming</span>
+                        </div>
+                        <button>Edit</button>
+                    </li>
+                    <li>
+                        <span>Notifications</span>
+                        <label class="switch">
+                            <input type="checkbox" checked />
+                            <span class="slider"></span>
+                        </label>
+                    </li>
+                    <li id="members-container">
+                        <span>Members</span>
+                        <ul id="members-list">
+                            <li class="member-item">
+                                <div>
+                                    <span class="member-name">Alice</span>
+                                    <span class="member-role">owner</span>
+                                </div>
+                                <button class="edit-member">Edit</button>
+                            </li>
+                            <li class="member-item">
+                                <div>
+                                    <span class="member-name">Bob</span>
+                                    <span class="member-role">admin</span>
+                                </div>
+                                <button class="edit-member">Edit</button>
+                            </li>
+                            <li class="member-item">
+                                <div>
+                                    <span class="member-name">Charlie</span>
+                                    <span class="member-role">member</span>
+                                </div>
+
+                                <button class="edit-member">Edit</button>
+                            </li>
+                            <li class="member-item">
+                                <div>
+                                    <span class="member-name">Dave</span>
+                                    <span class="member-role">member</span>
+                                </div>
+
+                                <button class="edit-member">Edit</button>
+                            </li>
+                            <li class="member-item">
+                                <div>
+                                    <span class="member-name">
+                                        <bold>Eve</bold>
+                                    </span>
+                                    <span class="member-role">member</span>
+                                </div>
+
+                                <button class="edit-member">Edit</button>
+                            </li>
+                            <!-- Add more members here -->
+                        </ul>
+                    </li>
+                </ul>
+            </div>
+        </div>
+        <!-- Popup container -->
+        <div id="popup" class="popup hidden">
+            <div class="popup-content">
+                <p id="popup-message">This is a popup!</p>
+                <div class="popup-buttons">
+                    <button id="popup-ok">OK</button>
+                    <button id="popup-cancel" class="hidden">Cancel</button>
+                </div>
+            </div>
+        </div>
+
+        <script src="src/index.js" defer></script>
+    </body>
+</html>
