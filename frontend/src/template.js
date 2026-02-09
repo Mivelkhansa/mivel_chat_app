@@ -1,9 +1,10 @@
-export const roomListTopbarTemplate = (username = "") => `
-  <div id="top-bar">
+export const roomListTopbarTemplate = () => `
+  <div id="top-bar" class="page-header">
       <div id="left-bar"><span id="logo">Velly-chat</span></div>
       <div id="right-bar">
-          <span class="username-badge">${username}</span>
-          <button id="logout-button" type="button">Logout</button>
+          <button id="settings-button" class="icon-button" type="button" aria-label="Open user settings">
+            <img src="icon/icons8-settings-24.svg" alt="Settings" />
+          </button>
       </div>
   </div>
 `;
@@ -33,10 +34,15 @@ export const roomListTemplate = (rooms = []) => `
 `;
 
 export const chatPageTemplate = (roomName) => `
-<div id="top-bar">
+<div id="top-bar" class="page-header">
   <div id="left-bar">
-    <button id="back-button" type="button">←</button>
+    <button id="back-button" class="icon-button back-icon" type="button" aria-label="Go back">‹</button>
     <span id="room-name">${roomName}</span>
+  </div>
+  <div id="right-bar">
+    <button id="settings-button" class="icon-button" type="button" aria-label="Open room settings">
+      <img src="icon/icons8-settings-24.svg" alt="Settings" />
+    </button>
   </div>
 </div>
 <div id="chat-container"></div>
@@ -45,6 +51,107 @@ export const chatPageTemplate = (roomName) => `
   <button id="send-button" type="button">
     <img src="icon/icons8-sent-24.png" alt="Send" />
   </button>
+</div>
+`;
+
+export const userSettingsTemplate = (username = "") => `
+<div class="settings-page">
+  <div id="top-bar" class="page-header">
+    <div id="left-bar">
+      <button id="back-button" class="icon-button back-icon" type="button" aria-label="Go back">‹</button>
+      <span id="room-name">Settings</span>
+    </div>
+  </div>
+
+  <h2 class="settings-title">Settings</h2>
+
+  <div class="setting-row">
+    <span>Account ${username ? `<span class="muted-value">${username}</span>` : ""}</span>
+    <button class="pill-button" type="button">Edit</button>
+  </div>
+
+  <div class="setting-row">
+    <span>Notifications</span>
+    <label class="switch"><input type="checkbox" checked /><span class="slider"></span></label>
+  </div>
+
+  <div class="setting-row">
+    <span>Appearance</span>
+    <span class="option-value">Dark Mode ˅</span>
+  </div>
+
+  <div class="setting-row">
+    <span>Language</span>
+    <span class="option-value">English ˅</span>
+  </div>
+
+  <div class="setting-row">
+    <span>About</span>
+    <button id="open-about" class="pill-button" type="button">View</button>
+  </div>
+
+  <div class="settings-footer">
+    <button id="logout-button" class="danger-link" type="button">Logout</button>
+  </div>
+</div>
+`;
+
+export const roomSettingsTemplate = (room) => {
+  const roomId = room?.id ?? "123456789012345678901234";
+  const roomName = room?.name ?? "programming";
+
+  return `
+<div class="settings-page">
+  <div id="top-bar" class="page-header">
+    <div id="left-bar">
+      <button id="back-button" class="icon-button back-icon" type="button" aria-label="Go back">‹</button>
+      <span id="room-name">Settings</span>
+    </div>
+  </div>
+
+  <h2 class="settings-title">Settings</h2>
+
+  <div class="setting-row">
+    <span>room-id: <span class="muted-value">${roomId}</span></span>
+    <button id="copy-room-id" class="pill-button" type="button">Copy</button>
+  </div>
+
+  <div class="setting-row">
+    <span>Room name: <span class="muted-value">${roomName}</span></span>
+    <button class="pill-button" type="button">Edit</button>
+  </div>
+
+  <div class="setting-row">
+    <span>Notifications</span>
+    <label class="switch"><input type="checkbox" checked /><span class="slider"></span></label>
+  </div>
+
+  <div class="setting-box">
+    <div class="setting-box-title">Members</div>
+    <div class="member-row"><span>Alice <span class="muted-value">owner</span></span><button class="pill-button" type="button">Edit</button></div>
+    <div class="member-row"><span>Bob <span class="muted-value">admin</span></span><button class="pill-button" type="button">Edit</button></div>
+    <div class="member-row"><span>Charlie <span class="muted-value">member</span></span><button class="pill-button" type="button">Edit</button></div>
+    <div class="member-row"><span>Dave <span class="muted-value">member</span></span><button class="pill-button" type="button">Edit</button></div>
+    <div class="member-row"><span>Eve <span class="muted-value">member</span></span><button class="pill-button" type="button">Edit</button></div>
+  </div>
+</div>
+`;
+};
+
+export const aboutTemplate = () => `
+<div class="about-page">
+  <div id="top-bar" class="page-header">
+    <div id="left-bar">
+      <button id="back-button" class="icon-button back-icon" type="button" aria-label="Go back">‹</button>
+      <span id="room-name">About</span>
+    </div>
+  </div>
+
+  <div class="about-card">
+    <h2>Velly-chat</h2>
+    <p>A simple real-time chat app with room-based conversations and a clean dark UI.</p>
+    <p>Made for fast messaging with focused user and room settings.</p>
+  </div>
 </div>
 `;
 
