@@ -1,125 +1,324 @@
 import {
+  authModalTemplate,
+  chatPageTemplate,
+  createRoomPopupTemplate,
   roomListTemplate,
   roomListTopbarTemplate,
-  loginPopupTemplate,
-  signupPopupTemplate,
 } from "./template.js";
 
-let isLoggedIn = false;
+const API_BASE = "http://localhost:5000";
 
-// ====================
-// ROUTES
-// ====================
-const route = {
-  "/": renderRoomList,
-};
-
-// ====================
-// RENDER ROOM LIST
-// ====================
-function renderRoomList() {
-  const app = document.getElementById("app");
-  app.innerHTML =
-    roomListTopbarTemplate() +
-    roomListTemplate([
-      { id: 1, name: "Room 1", description: "General chat" },
-      { id: 2, name: "Room 2", description: "Gaming" },
-      { id: 3, name: "Room 3", description: "Programming" },
-    ]);
-
-  // Show login popup if not logged in
-  if (!isLoggedIn) openSignupPopup();
-
-  // Add-room button listener
-  const addRoomButton = document.getElementById("add-room");
-  if (addRoomButton) {
-    addRoomButton.addEventListener("click", () => {
-      console.log("Add Room clicked");
-      app.insertAdjacentHTML("beforeend", createRoomPopupTemplate());
-    });
+function decodeUserIdFromToken(token) {
+  try {
+    const payload = JSON.parse(atob(token.split(".")[1]));
+    return payload.sub;
+  } catch {
+    return "";
   }
 }
 
-// ====================
-// LOGIN POPUP FUNCTIONS
-// ====================
-function showLoginPopup() {
-  // remove any existing auth popup
-  const existingLogin = document.getElementById("login-overlay");
-  if (existingLogin) existingLogin.remove();
 
-  const existingSignup = document.getElementById("signup-overlay");
-  if (existingSignup) existingSignup.remove();
+const state = {
+  userId: "",
+  accessToken: localStorage.getItem("access_token") || "",
+  refreshToken: localStorage.getItem("refresh_token") || "",
+  username: localStorage.getItem("username") || "",
+  authMode: "login",
+  rooms: [],
+  activeRoom: null,
+  socket: null,
+};
 
-  document.body.insertAdjacentHTML("beforeend", loginPopupTemplate());
+function saveAuth({ access_token, refresh_token, username }) {
+  if (access_token) {
+    state.accessToken = access_token;
+    state.userId = decodeUserIdFromToken(access_token);
+    localStorage.setItem("access_token", access_token);
+  }
+  if (refresh_token) {
+    state.refreshToken = refresh_token;
+    localStorage.setItem("refresh_token", refresh_token);
+  }
+  if (username) {
+    state.username = username;
+    localStorage.setItem("username", username);
+  }
+}
 
-  document
-    .getElementById("login-close")
-    .addEventListener("click", closeLoginPopup);
+function clearAuth() {
+  state.accessToken = "";
+  state.refreshToken = "";
+  state.username = "";
+  state.userId = "";
+  localStorage.removeItem("access_token");
+  localStorage.removeItem("refresh_token");
+  localStorage.removeItem("username");
+}
 
-  document
-    .getElementById("login-submit")
-    .addEventListener("click", handleLogin);
+async function api(path, options = {}, allowRetry = true) {
+  const headers = {
+    "Content-Type": "application/json",
+    ...(options.headers || {}),
+  };
 
-  document.getElementById("signup-open").addEventListener("click", () => {
-    closeLoginPopup();
-    openSignupPopup();
+  if (state.accessToken) {
+    headers.Authorization = `Bearer ${state.accessToken}`;
+  }
+
+  const response = await fetch(`${API_BASE}${path}`, {
+    ...options,
+    headers,
+  });
+
+  if (response.status === 401 && allowRetry && state.refreshToken) {
+    const refreshed = await refreshAccessToken();
+    if (refreshed) {
+      return api(path, options, false);
+    }
+  }
+
+  if (!response.ok) {
+    const data = await response.json().catch(() => ({}));
+    throw new Error(data.error || "Request failed");
+  }
+
+  const text = await response.text();
+  return text ? JSON.parse(text) : null;
+}
+
+async function refreshAccessToken() {
+  try {
+    const response = await fetch(`${API_BASE}/refresh`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ refresh_token: state.refreshToken }),
+    });
+
+    if (!response.ok) {
+      clearAuth();
+      return false;
+    }
+
+    const data = await response.json();
+    saveAuth({ access_token: data.access_token });
+    return true;
+  } catch {
+    clearAuth();
+    return false;
+  }
+}
+
+function showError(message) {
+  alert(message);
+}
+
+function renderAuthModal() {
+  document.body.insertAdjacentHTML("beforeend", authModalTemplate(state.authMode));
+
+  document.getElementById("auth-switch").addEventListener("click", () => {
+    document.getElementById("auth-overlay")?.remove();
+    state.authMode = state.authMode === "login" ? "signup" : "login";
+    renderAuthModal();
+  });
+
+  document.getElementById("auth-submit").addEventListener("click", async () => {
+    const username = document.getElementById("auth-username").value.trim();
+    const password = document.getElementById("auth-password").value;
+
+    if (!username || !password) {
+      return showError("Username and password are required.");
+    }
+
+    try {
+      if (state.authMode === "signup") {
+        await api("/signup", {
+          method: "POST",
+          body: JSON.stringify({ username, password }),
+        });
+      }
+
+      const data = await api("/login", {
+        method: "POST",
+        body: JSON.stringify({ username, password }),
+      });
+
+      saveAuth({ ...data, username });
+      document.getElementById("auth-overlay")?.remove();
+      initSocket();
+      await renderRooms();
+    } catch (error) {
+      showError(error.message);
+    }
   });
 }
 
-function handleLogin() {
-  const username = document.getElementById("login-username").value;
-  const password = document.getElementById("login-password").value;
+async function renderRooms() {
+  const app = document.getElementById("app");
 
-  if (username && password) {
-    isLoggedIn = true;
-    closeLoginPopup();
-  } else {
-    alert("Username and password required");
+  try {
+    const data = await api("/my-rooms");
+    state.rooms = data.rooms || [];
+  } catch (error) {
+    if (!state.accessToken) {
+      app.innerHTML = "";
+      renderAuthModal();
+      return;
+    }
+    showError(error.message);
+    state.rooms = [];
   }
+
+  app.innerHTML = roomListTopbarTemplate(state.username) + roomListTemplate(state.rooms);
+
+  document.getElementById("logout-button")?.addEventListener("click", () => {
+    state.socket?.disconnect();
+    clearAuth();
+    app.innerHTML = "";
+    renderAuthModal();
+  });
+
+  document.querySelectorAll(".room").forEach((roomEl) => {
+    roomEl.addEventListener("click", () => {
+      const room = state.rooms.find((r) => String(r.id) === roomEl.dataset.id);
+      if (room) {
+        renderChat(room);
+      }
+    });
+  });
+
+  document.getElementById("add-room")?.addEventListener("click", () => {
+    document.body.insertAdjacentHTML("beforeend", createRoomPopupTemplate());
+
+    document.getElementById("create-room-cancel").addEventListener("click", () => {
+      document.getElementById("create-room-popup-overlay")?.remove();
+    });
+
+    document.getElementById("create-room-submit").addEventListener("click", async () => {
+      const roomName = document.getElementById("room-name").value.trim();
+      const roomDescription = document.getElementById("room-description").value.trim();
+
+      if (!roomName) {
+        return showError("Room name is required.");
+      }
+
+      try {
+        await api("/room", {
+          method: "POST",
+          body: JSON.stringify({ room_name: roomName, room_description: roomDescription }),
+        });
+        document.getElementById("create-room-popup-overlay")?.remove();
+        await renderRooms();
+      } catch (error) {
+        showError(error.message);
+      }
+    });
+  });
 }
 
-function closeLoginPopup() {
-  const overlay = document.getElementById("login-overlay");
-  if (overlay) overlay.remove();
+function renderMessage({ sender, message, timestamp, sender_id }) {
+  const container = document.getElementById("chat-container");
+  const mine = sender_id && state.userId === sender_id;
+  const date = new Date(timestamp);
+
+  container.insertAdjacentHTML(
+    "beforeend",
+    `<div class="message ${mine ? "my-message" : ""}">
+      <div class="content">
+        ${mine ? "" : `<span class="username">${sender}</span>`}
+        <span class="timestamp">${date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</span>
+        <p>${message}</p>
+      </div>
+    </div>`,
+  );
+
+  container.scrollTop = container.scrollHeight;
 }
 
-// ====================
-// SIGN UP POPUP FUNCTIONS
-// ====================
-function openSignupPopup() {
-  // remove any existing signup popup
-  const existing = document.getElementById("signup-overlay");
-  if (existing) existing.remove();
+function renderChat(room) {
+  state.activeRoom = room;
+  const app = document.getElementById("app");
+  app.innerHTML = chatPageTemplate(room.name);
 
-  // open signup popup
-  document.body.insertAdjacentHTML("beforeend", signupPopupTemplate());
+  document.getElementById("back-button").addEventListener("click", () => {
+    if (state.activeRoom) {
+      state.socket?.emit("leave_room", { room: state.activeRoom.id });
+    }
+    state.activeRoom = null;
+    renderRooms();
+  });
 
-  document
-    .getElementById("signup-close")
-    .addEventListener("click", closeSignupPopup);
+  document.getElementById("send-button").addEventListener("click", sendActiveMessage);
+  document.getElementById("message-input").addEventListener("keydown", (event) => {
+    if (event.key === "Enter" && !event.shiftKey) {
+      event.preventDefault();
+      sendActiveMessage();
+    }
+  });
+
+  state.socket?.emit("join_rooms", { room_ids: [room.id] });
+  state.socket?.emit("fetch_history", { room: room.id });
 }
 
-function closeSignupPopup() {
-  const overlay = document.getElementById("signup-overlay");
-  if (overlay) overlay.remove();
-}
+function sendActiveMessage() {
+  const input = document.getElementById("message-input");
+  const message = input.value.trim();
 
-// ====================
-// ROUTE HANDLER
-// ====================
-function handleRoute() {
-  const path = window.location.pathname;
-  if (route[path]) {
-    route[path]();
-  } else {
-    route["/"]();
+  if (!message || !state.activeRoom) {
+    return;
   }
+
+  state.socket?.emit("send_message", {
+    room: state.activeRoom.id,
+    message,
+  });
+
+  input.value = "";
 }
 
-// ====================
-// INITIALIZE APP
-// ====================
-document.addEventListener("DOMContentLoaded", () => {
-  handleRoute();
-});
+function initSocket() {
+  if (!window.io || !state.accessToken) {
+    return;
+  }
+
+  state.socket?.disconnect();
+
+  state.socket = window.io(API_BASE, {
+    auth: { token: state.accessToken },
+  });
+
+  state.socket.on("old_messages", ({ room, messages }) => {
+    if (!state.activeRoom || room !== state.activeRoom.id) {
+      return;
+    }
+    const container = document.getElementById("chat-container");
+    container.innerHTML = "";
+    messages.forEach((msg) => renderMessage(msg));
+  });
+
+  state.socket.on("new_message", (payload) => {
+    if (!state.activeRoom || payload.room !== state.activeRoom.id) {
+      return;
+    }
+    renderMessage(payload);
+  });
+
+  state.socket.on("error", ({ error }) => {
+    if (error) showError(error);
+  });
+}
+
+async function bootstrap() {
+  if (state.accessToken) {
+    state.userId = decodeUserIdFromToken(state.accessToken);
+  }
+
+  if (!state.accessToken) {
+    renderAuthModal();
+    return;
+  }
+
+  initSocket();
+  await renderRooms();
+}
+
+document.addEventListener("DOMContentLoaded", bootstrap);
