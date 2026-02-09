@@ -1,9 +1,12 @@
 import {
+  aboutTemplate,
   authModalTemplate,
   chatPageTemplate,
   createRoomPopupTemplate,
   roomListTemplate,
   roomListTopbarTemplate,
+  roomSettingsTemplate,
+  userSettingsTemplate,
 } from "./template.js";
 
 const API_BASE = "http://localhost:5000";
@@ -16,7 +19,6 @@ function decodeUserIdFromToken(token) {
     return "";
   }
 }
-
 
 const state = {
   userId: "",
@@ -170,11 +172,8 @@ async function renderRooms() {
 
   app.innerHTML = roomListTopbarTemplate(state.username) + roomListTemplate(state.rooms);
 
-  document.getElementById("logout-button")?.addEventListener("click", () => {
-    state.socket?.disconnect();
-    clearAuth();
-    app.innerHTML = "";
-    renderAuthModal();
+  document.getElementById("settings-button")?.addEventListener("click", () => {
+    renderUserSettings();
   });
 
   document.querySelectorAll(".room").forEach((roomEl) => {
@@ -247,6 +246,10 @@ function renderChat(room) {
     renderRooms();
   });
 
+  document.getElementById("settings-button").addEventListener("click", () => {
+    renderRoomSettings();
+  });
+
   document.getElementById("send-button").addEventListener("click", sendActiveMessage);
   document.getElementById("message-input").addEventListener("keydown", (event) => {
     if (event.key === "Enter" && !event.shiftKey) {
@@ -257,6 +260,61 @@ function renderChat(room) {
 
   state.socket?.emit("join_rooms", { room_ids: [room.id] });
   state.socket?.emit("fetch_history", { room: room.id });
+}
+
+function renderUserSettings() {
+  const app = document.getElementById("app");
+  app.innerHTML = userSettingsTemplate(state.username);
+
+  document.getElementById("back-button").addEventListener("click", () => {
+    renderRooms();
+  });
+
+  document.getElementById("open-about").addEventListener("click", () => {
+    renderAbout();
+  });
+
+  document.getElementById("logout-button").addEventListener("click", () => {
+    state.socket?.disconnect();
+    clearAuth();
+    app.innerHTML = "";
+    renderAuthModal();
+  });
+}
+
+function renderRoomSettings() {
+  const app = document.getElementById("app");
+  app.innerHTML = roomSettingsTemplate(state.activeRoom);
+
+  document.getElementById("back-button").addEventListener("click", () => {
+    if (state.activeRoom) {
+      renderChat(state.activeRoom);
+    } else {
+      renderRooms();
+    }
+  });
+
+  document.getElementById("copy-room-id")?.addEventListener("click", async () => {
+    const roomId = String(state.activeRoom?.id || "");
+    if (!roomId) {
+      return;
+    }
+
+    try {
+      await navigator.clipboard.writeText(roomId);
+    } catch {
+      showError("Unable to copy room id.");
+    }
+  });
+}
+
+function renderAbout() {
+  const app = document.getElementById("app");
+  app.innerHTML = aboutTemplate();
+
+  document.getElementById("back-button").addEventListener("click", () => {
+    renderUserSettings();
+  });
 }
 
 function sendActiveMessage() {
@@ -291,12 +349,18 @@ function initSocket() {
       return;
     }
     const container = document.getElementById("chat-container");
+    if (!container) {
+      return;
+    }
     container.innerHTML = "";
     messages.forEach((msg) => renderMessage(msg));
   });
 
   state.socket.on("new_message", (payload) => {
     if (!state.activeRoom || payload.room !== state.activeRoom.id) {
+      return;
+    }
+    if (!document.getElementById("chat-container")) {
       return;
     }
     renderMessage(payload);
