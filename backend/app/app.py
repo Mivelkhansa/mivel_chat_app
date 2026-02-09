@@ -508,10 +508,7 @@ def my_rooms():
     methods=["GET", "POST", "DELETE", "PATCH"],
 )
 def manage_member(room_id, user_id):
-    data = request.get_json()
-    if data is None:
-        g.log.error("Invalid request data")
-        return jsonify({"error": "Invalid request data"}), 400
+    data = request.get_json(silent=True) or {}
 
     token = get_token_from_header()
     if not token:
@@ -540,7 +537,7 @@ def manage_member(room_id, user_id):
         g.log.error("Error querying requester", error=str(e))
         return jsonify({"error": "Internal server error"}), 500
 
-    if not requester:
+    if request.method != "POST" and not requester:
         g.log.error(
             "Requesting user not found", user_id=requesting_user_id, room_id=room_id
         )
@@ -572,6 +569,26 @@ def manage_member(room_id, user_id):
 
     # POST: add member (must be self)
     elif request.method == "POST":
+        if user_id != requesting_user_id:
+            g.log.error(
+                "User can only join as self",
+                requesting_user_id=requesting_user_id,
+                user_id=user_id,
+            )
+            return jsonify({"error": "You can only join as yourself"}), 403
+
+        if data.get("user_id") and data.get("user_id") != user_id:
+            g.log.error("Unauthorized", user_id=user_id, room_id=room_id)
+            return jsonify({"error": "Unauthorized"}), 403
+
+        exists = (
+            g.db.query(models.Room_members)
+            .filter_by(user_id=user_id, room_id=room_id)
+            .first()
+        )
+        if exists:
+            return jsonify({"error": "Already a member"}), 409
+
         try:
             g.db.add(models.Room_members(user_id=user_id, room_id=room_id))
             g.db.commit()
