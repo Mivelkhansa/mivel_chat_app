@@ -1,28 +1,40 @@
-# Vally_chat_App
-A fast, simple, and modern chat application built with flask.
+# Mivel Chat App
+A fast, simple, and modern room-based chat application built with Flask + Socket.IO and a Vanilla JavaScript frontend.
 
 ## ✨ Features
-
-- Real-time messaging
-- User authentication
-- Private and group chats
+- Real-time room messaging
+- JWT-based authentication (access + refresh)
+- Room management and member roles
+- Simple dark-themed chat UI
 
 ## 🛠 Tech Stack
+- **Frontend:** Vanilla JavaScript, HTML, CSS, Socket.IO client
+- **Backend:** Python, Flask, Flask-SocketIO, SQLAlchemy
+- **Database:** MySQL
+- **Queue / PubSub:** Redis
+- **Protocol:** HTTP + WebSocket (Socket.IO)
 
-- **Frontend:** vanilla javascript
-- **Backend:** python flask
-- **Database:** mySql, redis
-- **Protocol:** WebSocket, HTTP
+## 📚 Documentation
+- Full project documentation: [`PROJECT_DOCUMENTATION.md`](./PROJECT_DOCUMENTATION.md)
+- Coding conventions: [`STYLE_GUIDE.md`](./STYLE_GUIDE.md)
 
-## 📦 Installation
-
-### Requirements
-- Git
-- Python, flask
-- MySQL, 
-- redis
-
-### Clone the repository
+## 🚀 Quick start
+### 1) Start backend services
 ```bash
-https://github.com/Mivelkhansa/mivel_chat_app.git
-cd mivel_chat_app
+cd backend
+docker compose up --build
+```
+
+### 2) Serve frontend
+In another terminal:
+```bash
+cd frontend
+python -m http.server 6767
+```
+
+Open: `http://localhost:6767`
+
+> Frontend API base URL is currently configured as `http://localhost:5000`.
+
+## 📄 License
+MIT (see `license.txt`).
