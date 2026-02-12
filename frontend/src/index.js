@@ -275,8 +275,19 @@ function renderChat(room) {
       }
     });
 
-  state.socket?.emit("join_rooms", { room_ids: [room.id] });
-  state.socket?.emit("fetch_history", { room: room.id });
+  state.socket.emit("join_rooms", {
+    room_ids: [String(room.id)],
+  });
+
+  state.socket.once("joined_rooms", (data) => {
+    if (data.rooms.includes(String(room.id))) {
+      state.socket.emit("fetch_history", {
+        room: String(room.id),
+      });
+    } else {
+      showError("Failed to join room");
+    }
+  });
 }
 
 function renderUserSettings() {
@@ -353,23 +364,49 @@ function sendActiveMessage() {
 }
 
 function initSocket() {
-  if (!window.io || !state.accessToken) {
-    return;
-  }
+  if (!window.io || !state.accessToken) return;
+
   if (state.socket) {
-    state.socket.close();
+    state.socket.disconnect();
   }
 
-  state.socket = new WebSocket("ws://localhost:5000/ws");
+  state.socket = io("http://localhost:5000", {
+    auth: {
+      token: state.accessToken,
+    },
+    transports: ["websocket"], // optional but clean
+  });
 
-  state.socket.onopen = () => {
-    console.log("WebSocket connected");
-  };
+  state.socket.on("connect", () => {
+    console.log("Connected:", state.socket.id);
+    if (state.rooms.length > 0) {
+      state.socket.emit("join_rooms", {
+        room_ids: state.rooms.map((r) => String(r.id)),
+      });
+    }
+  });
 
-  state.socket.disconnect = () => {
-    state.socket.close();
-    state.socket = null;
-  };
+  state.socket.on("disconnect", () => {
+    console.log("Disconnected");
+  });
+
+  state.socket.on("error", (data) => {
+    showError(data.error);
+  });
+
+  // 🔹 History (old messages)
+  state.socket.on("old_messages", (data) => {
+    const container = document.getElementById("chat-container");
+    if (!container) return;
+
+    container.innerHTML = "";
+    data.messages.forEach(renderMessage);
+  });
+
+  // 🔹 Live messages
+  state.socket.on("new_message", (data) => {
+    renderMessage(data);
+  });
 }
 
 async function bootstrap() {
