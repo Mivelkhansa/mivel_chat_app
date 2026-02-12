@@ -858,6 +858,7 @@ def join_rooms(data):
 
 @socketio.on("fetch_history")
 def fetch_history(data):
+    print("Fetching history", data)
     state = socket_state.get(request.sid)
     room_id = data.get("room")
     log = logger.bind(room_id=room_id, request_id=request.sid)
@@ -959,12 +960,12 @@ def leave_room_handler(data):
 
 
 @socketio.on("disconnect")
-def socket_disconnect():
+def socket_disconnect(reason):
     state = socket_state.pop(request.sid, None)
     if not state:
         return
 
-    logger.info("Socket disconnected", user_id=state["user_id"])
+    logger.info("Socket disconnected", user_id=state["user_id"], reason=reason)
 
 
 @socketio.on_error_default

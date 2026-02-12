@@ -3,7 +3,10 @@ export const roomListTopbarTemplate = () => `
       <div id="left-bar"><span id="logo">Velly-chat</span></div>
       <div id="right-bar">
           <button id="settings-button" class="icon-button" type="button" aria-label="Open user settings">
-            <img src="icon/icons8-settings-24.svg" alt="Settings" />
+          <img
+              src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABgAAAAYCAYAAADgdz34AAAACXBIWXMAAAsTAAALEwEAmpwYAAABEElEQVR4nOWUz00CURDGV8+yBu0C79QBIe6VCoQqxAbgCjaANYBVcCPBmFgAcsOfmTAkZJmZgD4JiV/yLvu+P5v5difL/gWALvvopAx4NgJGqczvgLkRIM9qx5pdABNgDNwDA+ALH3LXV65opsBlFNDm92h75lfAe4KADyC3Ah4D0QJoARU9DWAW8HtWgIg+HfMbg1/VuzLEo+mNqQ6sSoJW0JmUuwvR1t2SVbQsiSoBNy9xl6H5DwKujwpwRtQI+MXBIwpKnkmhBv8WeHNK3n8p+bTwsdBCcz2FY77F0+l/tD9fFTvLThbWi46hD6wDs7VyCtW8hsvOAlBLtq6DkJERMExinm0COkbAQ7KAs8Y3aSD5YYFkBxMAAAAASUVORK5CYII="
+              alt="settings"
+          />
           </button>
       </div>
   </div>
@@ -41,7 +44,10 @@ export const chatPageTemplate = (roomName) => `
   </div>
   <div id="right-bar">
     <button id="settings-button" class="icon-button" type="button" aria-label="Open room settings">
-      <img src="icon/icons8-settings-24.svg" alt="Settings" />
+    <img
+        src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABgAAAAYCAYAAADgdz34AAAACXBIWXMAAAsTAAALEwEAmpwYAAABEElEQVR4nOWUz00CURDGV8+yBu0C79QBIe6VCoQqxAbgCjaANYBVcCPBmFgAcsOfmTAkZJmZgD4JiV/yLvu+P5v5difL/gWALvvopAx4NgJGqczvgLkRIM9qx5pdABNgDNwDA+ALH3LXV65opsBlFNDm92h75lfAe4KADyC3Ah4D0QJoARU9DWAW8HtWgIg+HfMbg1/VuzLEo+mNqQ6sSoJW0JmUuwvR1t2SVbQsiSoBNy9xl6H5DwKujwpwRtQI+MXBIwpKnkmhBv8WeHNK3n8p+bTwsdBCcz2FY77F0+l/tD9fFTvLThbWi46hD6wDs7VyCtW8hsvOAlBLtq6DkJERMExinm0COkbAQ7KAs8Y3aSD5YYFkBxMAAAAASUVORK5CYII="
+        alt="settings"
+    />
     </button>
   </div>
 </div>
@@ -151,6 +157,10 @@ export const aboutTemplate = () => `
     <h2>Velly-chat</h2>
     <p>A simple real-time chat app with room-based conversations and a clean dark UI.</p>
     <p>Made for fast messaging with focused user and room settings.</p>
+    <ul>
+    <li>Thanks <a href="https://icons8.com" target="_blank">icons8</a> for the icon</li>
+    <li>The code source code for this project is available on <a href="https://github.com/Mivelkhansa/mivel_chat_app" target="_blank">GitHub</a></li>
+    </ul>
   </div>
 </div>
 `;
