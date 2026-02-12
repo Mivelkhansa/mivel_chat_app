@@ -115,7 +115,10 @@ function showError(message) {
 }
 
 function renderAuthModal() {
-  document.body.insertAdjacentHTML("beforeend", authModalTemplate(state.authMode));
+  document.body.insertAdjacentHTML(
+    "beforeend",
+    authModalTemplate(state.authMode),
+  );
 
   document.getElementById("auth-switch").addEventListener("click", () => {
     document.getElementById("auth-overlay")?.remove();
@@ -170,7 +173,8 @@ async function renderRooms() {
     state.rooms = [];
   }
 
-  app.innerHTML = roomListTopbarTemplate(state.username) + roomListTemplate(state.rooms);
+  app.innerHTML =
+    roomListTopbarTemplate(state.username) + roomListTemplate(state.rooms);
 
   document.getElementById("settings-button")?.addEventListener("click", () => {
     renderUserSettings();
@@ -188,29 +192,38 @@ async function renderRooms() {
   document.getElementById("add-room")?.addEventListener("click", () => {
     document.body.insertAdjacentHTML("beforeend", createRoomPopupTemplate());
 
-    document.getElementById("create-room-cancel").addEventListener("click", () => {
-      document.getElementById("create-room-popup-overlay")?.remove();
-    });
-
-    document.getElementById("create-room-submit").addEventListener("click", async () => {
-      const roomName = document.getElementById("room-name").value.trim();
-      const roomDescription = document.getElementById("room-description").value.trim();
-
-      if (!roomName) {
-        return showError("Room name is required.");
-      }
-
-      try {
-        await api("/room", {
-          method: "POST",
-          body: JSON.stringify({ room_name: roomName, room_description: roomDescription }),
-        });
+    document
+      .getElementById("create-room-cancel")
+      .addEventListener("click", () => {
         document.getElementById("create-room-popup-overlay")?.remove();
-        await renderRooms();
-      } catch (error) {
-        showError(error.message);
-      }
-    });
+      });
+
+    document
+      .getElementById("create-room-submit")
+      .addEventListener("click", async () => {
+        const roomName = document.getElementById("room-name").value.trim();
+        const roomDescription = document
+          .getElementById("room-description")
+          .value.trim();
+
+        if (!roomName) {
+          return showError("Room name is required.");
+        }
+
+        try {
+          await api("/room", {
+            method: "POST",
+            body: JSON.stringify({
+              room_name: roomName,
+              room_description: roomDescription,
+            }),
+          });
+          document.getElementById("create-room-popup-overlay")?.remove();
+          await renderRooms();
+        } catch (error) {
+          showError(error.message);
+        }
+      });
   });
 }
 
@@ -250,13 +263,17 @@ function renderChat(room) {
     renderRoomSettings();
   });
 
-  document.getElementById("send-button").addEventListener("click", sendActiveMessage);
-  document.getElementById("message-input").addEventListener("keydown", (event) => {
-    if (event.key === "Enter" && !event.shiftKey) {
-      event.preventDefault();
-      sendActiveMessage();
-    }
-  });
+  document
+    .getElementById("send-button")
+    .addEventListener("click", sendActiveMessage);
+  document
+    .getElementById("message-input")
+    .addEventListener("keydown", (event) => {
+      if (event.key === "Enter" && !event.shiftKey) {
+        event.preventDefault();
+        sendActiveMessage();
+      }
+    });
 
   state.socket?.emit("join_rooms", { room_ids: [room.id] });
   state.socket?.emit("fetch_history", { room: room.id });
@@ -294,18 +311,20 @@ function renderRoomSettings() {
     }
   });
 
-  document.getElementById("copy-room-id")?.addEventListener("click", async () => {
-    const roomId = String(state.activeRoom?.id || "");
-    if (!roomId) {
-      return;
-    }
+  document
+    .getElementById("copy-room-id")
+    ?.addEventListener("click", async () => {
+      const roomId = String(state.activeRoom?.id || "");
+      if (!roomId) {
+        return;
+      }
 
-    try {
-      await navigator.clipboard.writeText(roomId);
-    } catch {
-      showError("Unable to copy room id.");
-    }
-  });
+      try {
+        await navigator.clipboard.writeText(roomId);
+      } catch {
+        showError("Unable to copy room id.");
+      }
+    });
 }
 
 function renderAbout() {
@@ -337,38 +356,20 @@ function initSocket() {
   if (!window.io || !state.accessToken) {
     return;
   }
+  if (state.socket) {
+    state.socket.close();
+  }
 
-  state.socket?.disconnect();
+  state.socket = new WebSocket("ws://localhost:5000/ws");
 
-  state.socket = window.io(API_BASE, {
-    auth: { token: state.accessToken },
-  });
+  state.socket.onopen = () => {
+    console.log("WebSocket connected");
+  };
 
-  state.socket.on("old_messages", ({ room, messages }) => {
-    if (!state.activeRoom || room !== state.activeRoom.id) {
-      return;
-    }
-    const container = document.getElementById("chat-container");
-    if (!container) {
-      return;
-    }
-    container.innerHTML = "";
-    messages.forEach((msg) => renderMessage(msg));
-  });
-
-  state.socket.on("new_message", (payload) => {
-    if (!state.activeRoom || payload.room !== state.activeRoom.id) {
-      return;
-    }
-    if (!document.getElementById("chat-container")) {
-      return;
-    }
-    renderMessage(payload);
-  });
-
-  state.socket.on("error", ({ error }) => {
-    if (error) showError(error);
-  });
+  state.socket.disconnect = () => {
+    state.socket.close();
+    state.socket = null;
+  };
 }
 
 async function bootstrap() {
