@@ -2,6 +2,7 @@ import {
   aboutTemplate,
   authModalTemplate,
   chatPageTemplate,
+  joinRoomPopupTemplate,
   createRoomPopupTemplate,
   roomListTemplate,
   roomListTopbarTemplate,
@@ -157,6 +158,79 @@ function renderAuthModal() {
   });
 }
 
+function renderJoinRoomPopup() {
+  document.body.insertAdjacentHTML("beforeend", joinRoomPopupTemplate());
+  document.getElementById("join-room-cancel").addEventListener("click", () => {
+    document.getElementById("join-room-popup-overlay")?.remove();
+  });
+  document
+    .getElementById("join-room-submit")
+    .addEventListener("click", async () => {
+      const roomId = document.getElementById("join-room-id").value;
+      if (!roomId) {
+        showError("Room ID is required");
+        return;
+      }
+      try {
+        await api(`/join_room/${roomId}`, {
+          method: "POST",
+        });
+        document.getElementById("join-room-popup")?.remove();
+        await renderRooms();
+      } catch (error) {
+        showError(error.message);
+      }
+    });
+  document.getElementById("open-create-room")?.addEventListener("click", () => {
+    document.getElementById("join-room-popup-overlay")?.remove();
+    renderCreateRoomPopup();
+  });
+}
+
+function renderCreateRoomPopup() {
+  document.body.insertAdjacentHTML("beforeend", createRoomPopupTemplate());
+
+  document
+    .getElementById("create-room-cancel")
+    .addEventListener("click", () => {
+      document.getElementById("create-room-popup-overlay")?.remove();
+    });
+
+  document
+    .getElementById("create-room-submit")
+    .addEventListener("click", async () => {
+      const roomName = document.getElementById("room-name").value.trim();
+      const roomDescription = document
+        .getElementById("room-description")
+        .value.trim();
+
+      if (!roomName) {
+        return showError("Room name is required.");
+      }
+
+      try {
+        await api("/room", {
+          method: "POST",
+          body: JSON.stringify({
+            room_name: roomName,
+            room_description: roomDescription,
+          }),
+        });
+
+        document.getElementById("create-room-popup-overlay")?.remove();
+        await renderRooms();
+      } catch (error) {
+        showError(error.message);
+      }
+    });
+
+  // 🔹 switch to join popup
+  document.getElementById("open-join-room")?.addEventListener("click", () => {
+    document.getElementById("create-room-popup-overlay")?.remove();
+    renderJoinRoomPopup();
+  });
+}
+
 async function renderRooms() {
   const app = document.getElementById("app");
 
@@ -190,40 +264,7 @@ async function renderRooms() {
   });
 
   document.getElementById("add-room")?.addEventListener("click", () => {
-    document.body.insertAdjacentHTML("beforeend", createRoomPopupTemplate());
-
-    document
-      .getElementById("create-room-cancel")
-      .addEventListener("click", () => {
-        document.getElementById("create-room-popup-overlay")?.remove();
-      });
-
-    document
-      .getElementById("create-room-submit")
-      .addEventListener("click", async () => {
-        const roomName = document.getElementById("room-name").value.trim();
-        const roomDescription = document
-          .getElementById("room-description")
-          .value.trim();
-
-        if (!roomName) {
-          return showError("Room name is required.");
-        }
-
-        try {
-          await api("/room", {
-            method: "POST",
-            body: JSON.stringify({
-              room_name: roomName,
-              room_description: roomDescription,
-            }),
-          });
-          document.getElementById("create-room-popup-overlay")?.remove();
-          await renderRooms();
-        } catch (error) {
-          showError(error.message);
-        }
-      });
+    renderJoinRoomPopup();
   });
 }
 

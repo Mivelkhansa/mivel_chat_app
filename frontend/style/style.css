@@ -15,9 +15,10 @@ body {
 .page-header,
 #top-bar {
     display: flex;
+    flex-shrink: 0;
     justify-content: space-between;
     align-items: center;
-    padding: 14px 18px;
+    padding: 10px 18px;
 }
 
 #left-bar {
@@ -94,6 +95,13 @@ body {
     overflow-y: auto;
     font-size: 1.2rem;
     padding: 6px;
+    min-height: 0;
+}
+.chat-page {
+    display: flex;
+    flex-direction: column;
+    height: 100vh; /* full screen */
+    overflow: hidden;
 }
 
 .message {
@@ -142,8 +150,9 @@ body {
 #input-bar {
     display: flex;
     flex-direction: row;
+    flex-shrink: 0;
     gap: 10px;
-    padding: 0 0 0 0;
+    padding: 10px;
 }
 
 #message-input {
@@ -370,4 +379,44 @@ body {
     .room-description {
         font-size: 1.2rem;
     }
+}
+
+.button {
+    border: none;
+    border-radius: 8px;
+    padding: 8px 12px;
+    cursor: pointer;
+    background: #009a83;
+    color: #e9edef;
+}
+
+.auth-switch {
+    background: transparent;
+    color: #9fc8ff;
+    padding: 0;
+    text-align: left;
+}
+
+@media (max-width: 900px) {
+    #logo,
+    #room-name,
+    .settings-title {
+        font-size: 2rem;
+    }
+
+    .room-name {
+        font-size: 1.9rem;
+    }
+
+    .room-description {
+        font-size: 1.2rem;
+    }
+}
+
+.join-room {
+    cursor: pointer;
+}
+
+.create-room {
+    cursor: pointer;
 }

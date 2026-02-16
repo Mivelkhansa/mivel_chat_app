@@ -372,7 +372,7 @@ def delete_room(room_id):
         return jsonify({"error": "Token not provided"}), 400
 
     try:
-        verify_access_token(token)
+        payload = verify_access_token(token)
     except jwt.ExpiredSignatureError:
         g.log.error("Token expired", token=token)
         return jsonify({"error": "Token expired"}), 401
@@ -381,6 +381,7 @@ def delete_room(room_id):
         return jsonify({"error": "Invalid token"}), 401
 
     try:
+        user_id = payload["sub"]
         member = (
             g.db.query(models.Room_members)
             .filter_by(room_id=room_id, user_id=user_id)
@@ -542,31 +543,6 @@ def manage_member(room_id, user_id):
             "Requesting user not found", user_id=requesting_user_id, room_id=room_id
         )
         return jsonify({"error": "Unauthorized"}), 403
-
-    # POST: add member (must be self)
-    elif request.method == "POST":
-        if user_id != requesting_user_id:
-            return jsonify({"error": "You can only join as yourself"}), 403
-
-        exists = (
-            g.db.query(models.Room_members)
-            .filter_by(user_id=user_id, room_id=room_id)
-            .first()
-        )
-        if exists:
-            return jsonify({"error": "Already a member"}), 409
-        new_member = models.Room_members(
-            user_id=user_id, room_id=room_id, member_role=MemberRole.MEMBER
-        )
-        try:
-            g.db.add(new_member)
-            g.db.commit()
-            g.log.info("Member added", user_id=user_id, room_id=room_id)
-            return jsonify({"message": "Member added"}), 200
-        except SQLAlchemyError as e:
-            g.log.error("Failed to add member", error=str(e))
-            g.db.rollback()
-            return jsonify({"error": "Failed to add member"}), 500
 
     # DELETE: remove member
     # Self-leave (allowed for everyone except owner)
@@ -745,6 +721,53 @@ def transfer_owner(room_id, new_owner_id):
     except NoResultFound:
         g.log.warning("new owner not found")
         return jsonify({"error": "new owner not found"}), 404
+
+
+@app.route("/join_room/<string:room_id>", methods=["POST"])
+def join_room_rest(room_id):
+    token = get_token_from_header()
+    try:
+        payload = verify_access_token(str(token))
+    except jwt.ExpiredSignatureError:
+        g.log.error("Token expired", token=token)
+        return jsonify({"error": "Token expired"}), 401
+    except jwt.InvalidTokenError:
+        g.log.error("Invalid token", token=token)
+        return jsonify({"error": "Invalid token"}), 401
+    user_id = payload["sub"]
+    try:
+        room = g.db.query(models.Room).filter_by(room_id=room_id).first()
+        if not room:
+            return jsonify({"error": "Room not found"}), 404
+    except SQLAlchemyError as e:
+        g.log.error("Failed to fetch room", error=str(e))
+        return jsonify({"error": "Failed to fetch room"}), 500
+
+    try:
+        exists = (
+            g.db.query(models.Room_members)
+            .filter_by(user_id=user_id, room_id=room_id)
+            .first()
+        )
+        if exists:
+            return jsonify({"error": "Already a member"}), 409
+        new_member = models.Room_members(
+            user_id=user_id, room_id=room_id, member_role=MemberRole.MEMBER
+        )
+
+    except SQLAlchemyError as e:
+        g.log.error("Failed to create member", error=str(e))
+        return jsonify({"error": "Failed to create member"}), 500
+
+    try:
+        g.db.add(new_member)
+        g.db.commit()
+        g.log.info("Member added", user_id=user_id, room_id=room_id)
+        return jsonify({"message": "Member added"}), 201
+    except SQLAlchemyError as e:
+        g.log.error("Failed to add member", error=str(e))
+        g.db.rollback()
+        return jsonify({"error": "Failed to add member"}), 500
 
 
 @app.route("/room/<string:room_id>/members", methods=["GET"])
