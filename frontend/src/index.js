@@ -310,8 +310,23 @@ function renderUserSettings() {
   });
 }
 
-function renderRoomSettings() {
+async function renderRoomSettings() {
   const app = document.getElementById("app");
+  const room = state.activeRoom;
+  if (!room) return;
+
+  try {
+    const members = await api(`/room/${room.id}/members`);
+    room.members = members.map((m) => ({
+      id: m.id,
+      name: m.username,
+      role: m.role,
+    }));
+  } catch (err) {
+    showError("Failed to fetch members: " + err.message);
+    room.members = [];
+  }
+
   app.innerHTML = roomSettingsTemplate(state.activeRoom);
 
   document.getElementById("back-button").addEventListener("click", () => {

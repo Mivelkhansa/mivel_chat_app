@@ -57,14 +57,14 @@ socketio = SocketIO(
     async_mode="gevent",
 )
 
+
 CORS(
     app,
-    origins=[
-        "http://localhost:3000",
-        "http://localhost:5173",
-    ],
+    origins=["http://localhost:3000", "http://localhost:5173", "http://localhost:6767"],
+    supports_credentials=True,
+    allow_headers=["Content-Type", "Authorization"],
+    methods=["GET", "POST", "PATCH", "DELETE", "OPTIONS"],
 )
-
 # -------------------------
 # Redis
 # -------------------------
@@ -507,7 +507,7 @@ def my_rooms():
 # -------------------------
 @app.route(
     "/room/<string:room_id>/members/<string:user_id>",
-    methods=["GET", "POST", "DELETE", "PATCH"],
+    methods=["POST", "DELETE", "PATCH"],
 )
 def manage_member(room_id, user_id):
     token = get_token_from_header()
@@ -542,30 +542,6 @@ def manage_member(room_id, user_id):
             "Requesting user not found", user_id=requesting_user_id, room_id=room_id
         )
         return jsonify({"error": "Unauthorized"}), 403
-
-    # GET members (safe, no modification)
-    if request.method == "GET":
-        try:
-            members = (
-                g.db.query(models.Room_members, models.User.username)
-                .join(models.User, models.Room_members.user_id == models.User.user_id)
-                .filter_by(room_id=room_id)
-                .all()
-            )
-            g.log.info("Members retrieved", room_id=room_id)
-            return jsonify(
-                [
-                    {
-                        "username": username,
-                        "id": member.user_id,
-                        "role": member.member_role.name,
-                    }
-                    for member, username in members
-                ]
-            ), 200
-        except SQLAlchemyError as e:
-            g.log.error("Failed to retrieve members", error=str(e))
-            return jsonify({"error": "Failed to retrieve members"}), 500
 
     # POST: add member (must be self)
     elif request.method == "POST":
@@ -771,6 +747,41 @@ def transfer_owner(room_id, new_owner_id):
         return jsonify({"error": "new owner not found"}), 404
 
 
+@app.route("/room/<string:room_id>/members", methods=["GET"])
+def list_members(room_id):
+    token = get_token_from_header()
+    try:
+        verify_access_token(str(token))
+    except jwt.ExpiredSignatureError:
+        g.log.error("Token expired", token=token)
+        return jsonify({"error": "Token expired"}), 401
+    except jwt.InvalidTokenError:
+        g.log.error("Invalid token", token=token)
+        return jsonify({"error": "Invalid token"}), 401
+    try:
+        members = (
+            g.db.query(models.Room_members, models.User.username)
+            .join(models.User, models.Room_members.user_id == models.User.user_id)
+            .filter(models.Room_members.room_id == room_id)
+            .all()
+        )
+
+        g.log.info("Members retrieved", room_id=room_id)
+        return jsonify(
+            [
+                {
+                    "username": username,
+                    "id": member.user_id,
+                    "role": member.member_role.name,
+                }
+                for member, username in members
+            ]
+        ), 200
+    except SQLAlchemyError as e:
+        g.log.error("Failed to retrieve members", error=str(e))
+        return jsonify({"error": "Failed to retrieve members"}), 500
+
+
 # -------------------------
 # Socket.IO (JWT)
 # -------------------------
@@ -885,7 +896,7 @@ def fetch_history(data):
                 "sender_id": msg.sender,
                 "message_id": msg.id,
                 "message": msg.message,
-                "timestamp": msg.date_created.isoformat(),
+                "timestamp": msg.date_created.astimezone(timezone.utc).isoformat(),
             }
             for msg, sender in reversed(msgs_query)
         ]
@@ -935,7 +946,7 @@ def send_message(data):
             "sender_id": state["user_id"],
             "message_id": msg.id,
             "message": message,
-            "timestamp": msg.date_created.isoformat(),
+            "timestamp": msg.date_created.astimezone(timezone.utc).isoformat(),
         }
 
         emit("new_message", payload, room=room_id)

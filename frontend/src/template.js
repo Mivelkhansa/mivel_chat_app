@@ -133,12 +133,16 @@ export const roomSettingsTemplate = (room) => {
   </div>
 
   <div class="setting-box">
-    <div class="setting-box-title">Members</div>
-    <div class="member-row"><span>Alice <span class="muted-value">owner</span></span><button class="pill-button" type="button">Edit</button></div>
-    <div class="member-row"><span>Bob <span class="muted-value">admin</span></span><button class="pill-button" type="button">Edit</button></div>
-    <div class="member-row"><span>Charlie <span class="muted-value">member</span></span><button class="pill-button" type="button">Edit</button></div>
-    <div class="member-row"><span>Dave <span class="muted-value">member</span></span><button class="pill-button" type="button">Edit</button></div>
-    <div class="member-row"><span>Eve <span class="muted-value">member</span></span><button class="pill-button" type="button">Edit</button></div>
+  ${room.members
+    .map(
+      (member) => `
+    <div class="member-row">
+      <span>${member.name} <span class="muted-value">${member.role}</span></span>
+      <button class="pill-button" type="button">Edit</button>
+    </div>
+  `,
+    )
+    .join("")}
   </div>
 </div>
 `;
