@@ -37,26 +37,28 @@ export const roomListTemplate = (rooms = []) => `
 `;
 
 export const chatPageTemplate = (roomName) => `
-<div id="top-bar" class="page-header">
-  <div id="left-bar">
-    <button id="back-button" class="icon-button back-icon" type="button" aria-label="Go back">‹</button>
-    <span id="room-name">${roomName}</span>
+<div class="chat-page">
+  <div id="top-bar" class="page-header">
+    <div id="left-bar">
+      <button id="back-button" class="icon-button back-icon" type="button">‹</button>
+      <span id="room-name">${roomName}</span>
+    </div>
+    <div id="right-bar">
+      <button id="settings-button" class="icon-button" type="button">
+        <img src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABgAAAAYCAYAAADgdz34AAAACXBIWXMAAAsTAAALEwEAmpwYAAABEElEQVR4nOWUz00CURDGV8+yBu0C79QBIe6VCoQqxAbgCjaANYBVcCPBmFgAcsOfmTAkZJmZgD4JiV/yLvu+P5v5difL/gWALvvopAx4NgJGqczvgLkRIM9qx5pdABNgDNwDA+ALH3LXV65opsBlFNDm92h75lfAe4KADyC3Ah4D0QJoARU9DWAW8HtWgIg+HfMbg1/VuzLEo+mNqQ6sSoJW0JmUuwvR1t2SVbQsiSoBNy9xl6H5DwKujwpwRtQI+MXBIwpKnkmhBv8WeHNK3n8p+bTwsdBCcz2FY77F0+l/tD9fFTvLThbWi46hD6wDs7VyCtW8hsvOAlBLtq6DkJERMExinm0COkbAQ7KAs8Y3aSD5YYFkBxMAAAAASUVORK5CYII="
+         alt="settings"/>
+      </button>
+    </div>
   </div>
-  <div id="right-bar">
-    <button id="settings-button" class="icon-button" type="button" aria-label="Open room settings">
-    <img
-        src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABgAAAAYCAYAAADgdz34AAAACXBIWXMAAAsTAAALEwEAmpwYAAABEElEQVR4nOWUz00CURDGV8+yBu0C79QBIe6VCoQqxAbgCjaANYBVcCPBmFgAcsOfmTAkZJmZgD4JiV/yLvu+P5v5difL/gWALvvopAx4NgJGqczvgLkRIM9qx5pdABNgDNwDA+ALH3LXV65opsBlFNDm92h75lfAe4KADyC3Ah4D0QJoARU9DWAW8HtWgIg+HfMbg1/VuzLEo+mNqQ6sSoJW0JmUuwvR1t2SVbQsiSoBNy9xl6H5DwKujwpwRtQI+MXBIwpKnkmhBv8WeHNK3n8p+bTwsdBCcz2FY77F0+l/tD9fFTvLThbWi46hD6wDs7VyCtW8hsvOAlBLtq6DkJERMExinm0COkbAQ7KAs8Y3aSD5YYFkBxMAAAAASUVORK5CYII="
-        alt="settings"
-    />
+
+  <div id="chat-container"></div>
+
+  <div id="input-bar">
+    <textarea id="message-input" placeholder="Type your message..."></textarea>
+    <button id="send-button" type="button">
+      <img src="icon/icons8-sent-24.png" alt="Send"/>
     </button>
   </div>
-</div>
-<div id="chat-container"></div>
-<div id="input-bar">
-  <textarea id="message-input" placeholder="Type your message..."></textarea>
-  <button id="send-button" type="button">
-    <img src="icon/icons8-sent-24.png" alt="Send" />
-  </button>
 </div>
 `;
 
@@ -178,7 +180,7 @@ export const authModalTemplate = (mode = "login") => {
       <input id="auth-username" placeholder="Username" />
       <input id="auth-password" type="password" placeholder="Password" />
       <div class="actions">
-        <button id="auth-submit" type="button">${isLogin ? "Login" : "Sign up"}</button>
+        <button id="auth-submit" class="button" type="button">${isLogin ? "Login" : "Sign up"}</button>
       </div>
       <button id="auth-switch" class="auth-switch" type="button">
         ${isLogin ? "Need an account? Sign up" : "Already have an account? Login"}
@@ -195,9 +197,24 @@ export const createRoomPopupTemplate = () => `
     <input id="room-name" placeholder="Room name" />
     <input id="room-description" placeholder="Room description" />
     <div class="actions">
-      <button id="create-room-submit" type="button">Create</button>
-      <button id="create-room-cancel" type="button">Cancel</button>
+      <button id="create-room-submit" class="button" type="button">Create</button>
+      <button id="create-room-cancel" class="button" type="button">Cancel</button>
     </div>
+    <span id="open-join-room" class="create-room">Join room</span>
+  </div>
+</div>
+`;
+
+export const joinRoomPopupTemplate = () => `
+<div id="join-room-popup-overlay" class="overlay">
+  <div class="auth-modal">
+    <h2>Join room</h2>
+    <input id="join-room-id" placeholder="Room ID" />
+    <div class="actions">
+      <button id="join-room-submit" class="button" type="button">Join</button>
+      <button id="join-room-cancel" class="button" type="button">Cancel</button>
+    </div>
+    <span id="open-create-room" class="join-room">Create room</span>
   </div>
 </div>
 `;
