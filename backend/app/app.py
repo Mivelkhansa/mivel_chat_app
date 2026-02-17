@@ -9,8 +9,19 @@ from datetime import timedelta, timezone
 
 import bcrypt
 import jwt
-import models
 import redis
+from flask import Flask, g, jsonify, request
+from flask_cors import CORS
+from flask_socketio import (
+    SocketIO,
+    emit,
+    join_room,
+    leave_room,
+)
+from loguru import logger
+from sqlalchemy.exc import NoResultFound, SQLAlchemyError
+
+import models
 from config import (
     JWT_ACCESS_EXPIRATION,
     JWT_ACCESS_SECRET_KEY,
@@ -21,23 +32,7 @@ from config import (
     REDIS_PORT,
 )
 from db import init_db, session_local
-from flask import Flask, g, jsonify, request
-from flask_cors import CORS
-from flask_socketio import (
-    SocketIO,
-    emit,
-    join_room,
-    leave_room,
-)
-from loguru import logger
 from models import MemberRole, Room_members
-from sqlalchemy.exc import NoResultFound, SQLAlchemyError
-
-# -------------------------
-# constants
-# -------------------------
-MAX_MESSAGE_LENGTH = 2000
-
 
 # -------------------------
 # App & Socket.IO
