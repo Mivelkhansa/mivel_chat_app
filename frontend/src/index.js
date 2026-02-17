@@ -351,6 +351,16 @@ function renderUserSettings() {
   });
 }
 
+/**
+ * Render the settings view for the currently active room.
+ *
+ * Fetches and stores the room's member list, updates the DOM with the room settings UI,
+ * and attaches handlers for navigating back, copying the room ID to the clipboard,
+ * and leaving the room. If there is no active room the function returns without changes.
+ *
+ * Errors encountered while fetching members, copying the ID, or leaving the room are
+ * reported via showError and do not throw.
+ */
 async function renderRoomSettings() {
   const app = document.getElementById("app");
   const room = state.activeRoom;
@@ -407,6 +417,12 @@ async function renderRoomSettings() {
     });
 }
 
+/**
+ * Render the About view and wire its back button to return to the user settings.
+ *
+ * Replaces the main app content with the About template and attaches a click
+ * handler to the back button that navigates back to the user settings view.
+ */
 function renderAbout() {
   const app = document.getElementById("app");
   app.innerHTML = aboutTemplate();

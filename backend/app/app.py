@@ -177,12 +177,32 @@ def get_token_from_header():
 
 
 def get_username(db, user_id: str) -> str:
+    """
+    Fetch the username for a given user ID.
+    
+    Parameters:
+        user_id (str): The user's unique identifier.
+    
+    Returns:
+        The username as a string if a user with `user_id` exists, `None` otherwise.
+    """
     return (
         db.query(models.User.username).filter(models.User.user_id == user_id).scalar()
     )
 
 
 def sanitize_message(message: str) -> str:
+    """
+    Sanitize an HTML/Markdown-derived string and convert plain URLs into safe links.
+    
+    Cleans the input by removing disallowed tags, attributes, and protocols, then converts bare URLs into anchor tags with target="_blank" and rel="noopener noreferrer nofollow". Linkification is skipped inside <pre> and <code> elements.
+    
+    Parameters:
+        message (str): Raw user-provided message (may contain HTML or markdown-converted HTML).
+    
+    Returns:
+        str: Sanitized HTML string safe for insertion into rendered content.
+    """
     sanitized_message = clean(
         message,
         tags=ALLOWED_TAGS,
@@ -206,6 +226,15 @@ def sanitize_message(message: str) -> str:
 
 
 def render_message(message: str) -> str:
+    """
+    Convert a Markdown-formatted string into sanitized HTML safe for rendering.
+    
+    Parameters:
+        message (str): Markdown-formatted text to convert and sanitize.
+    
+    Returns:
+        str: HTML string produced from the Markdown input with unsafe content removed and links made safe.
+    """
     html = markdown(message, extensions=["extra"])
     sanitized_html = sanitize_message(html)
     return sanitized_html
@@ -766,6 +795,23 @@ def transfer_owner(room_id, new_owner_id):
 
 @app.route("/join_room/<string:room_id>", methods=["POST"])
 def join_room_rest(room_id):
+    """
+    Join the authenticated user to the room specified by room_id.
+    
+    Attempts to add the caller (determined from the Authorization header access token) as a MEMBER of the room. Returns appropriate JSON and HTTP status codes for success, authentication failures, membership conflicts, missing room, and database errors.
+    
+    Parameters:
+        room_id (str): Identifier of the room to join.
+    
+    Returns:
+        A tuple (response_json, status_code) where response_json is a JSON object and status_code is an HTTP status code. Possible responses include:
+        - 201: {"message": "Member added"} on success.
+        - 409: {"error": "Already a member"} if the user is already a member.
+        - 409: {"error": "Already banned"} if the user is banned from the room.
+        - 404: {"error": "Room not found"} if the room does not exist.
+        - 401: {"error": "Token expired"} or {"error": "Invalid token"} for authentication errors.
+        - 500: {"error": "..."} for database/read errors.
+    """
     token = get_token_from_header()
     try:
         payload = verify_access_token(str(token))
@@ -815,6 +861,20 @@ def join_room_rest(room_id):
 
 @app.route("/leave_room/<string:room_id>", methods=["DELETE"])
 def leave_room(room_id):
+    """
+    Remove the authenticated user from the specified room.
+    
+    Parameters:
+        room_id (str): Identifier of the room to leave.
+    
+    Returns:
+        tuple: A Flask JSON response and HTTP status code:
+            - 200: {"message": "User removed from room"} when the user successfully leaves.
+            - 401: {"error": "Token expired"} or {"error": "Invalid token"} when the access token is missing or invalid.
+            - 403: {"error": "You are the owner"} when the requester is the room owner and cannot leave.
+            - 404: {"error": "You are not in this room"} when the requester is not a member of the room.
+            - 500: {"error": "Database error"} on database failures.
+    """
     token = get_token_from_header()
     try:
         payload = verify_access_token(str(token))
@@ -851,6 +911,19 @@ def leave_room(room_id):
 
 @app.route("/room/<string:room_id>/members", methods=["GET"])
 def list_members(room_id):
+    """
+    Return the list of members for the specified room, including each member's username, user id, and role.
+    
+    Parameters:
+        room_id (str): Identifier of the room whose members will be listed.
+    
+    Returns:
+        HTTP JSON response:
+          - 200: A list of objects [{ "username": <str>, "id": <int>, "role": <str> }] for each member.
+          - 401: {"error": "Token expired"} if the access token is expired.
+          - 401: {"error": "Invalid token"} if the access token is invalid.
+          - 500: {"error": "Failed to retrieve members"} if a database error occurs.
+    """
     token = get_token_from_header()
     try:
         verify_access_token(str(token))
@@ -1014,6 +1087,16 @@ def fetch_history(data):
 
 @socketio.on("send_message")
 def send_message(data):
+    """
+    Handle an incoming socket message: validate input, persist the rendered message to the database, and broadcast it to the room.
+    
+    Validates that the current socket is joined to the specified room, that a non-empty message is provided, and that the message does not exceed MAX_MESSAGE_LENGTH. The message is rendered (sanitized/converted to HTML), stored as a Message record, and a "new_message" event containing sender info, message_id, message HTML, and an ISO-8601 timestamp is emitted to the room. On validation failure or database errors an "error" event is emitted.
+    
+    Parameters:
+        data (dict): Incoming payload with:
+            - "room" (str): Target room id.
+            - "message" (str): Raw message text to render and persist.
+    """
     state = socket_state.get(request.sid)
     room_id = data.get("room")
     message = data.get("message")
