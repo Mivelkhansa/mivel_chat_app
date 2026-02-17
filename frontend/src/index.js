@@ -392,6 +392,19 @@ async function renderRoomSettings() {
         showError("Unable to copy room id.");
       }
     });
+  document
+    .getElementById("leave-room-button")
+    .addEventListener("click", async () => {
+      if (!state.activeRoom) return;
+
+      try {
+        await api("/leave_room/" + state.activeRoom.id, { method: "DELETE" });
+        state.activeRoom = null;
+        renderRooms();
+      } catch (err) {
+        showError("Failed to leave room: " + err.message);
+      }
+    });
 }
 
 function renderAbout() {
