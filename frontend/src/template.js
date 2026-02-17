@@ -146,6 +146,9 @@ export const roomSettingsTemplate = (room) => {
     )
     .join("")}
   </div>
+  <div class="settings-footer">
+    <button id="leave-room-button" class="danger-link" type="button">Leave Room</button>
+  </div>
 </div>
 `;
 };
