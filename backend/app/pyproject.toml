@@ -1,5 +1,5 @@
 [project]
-name = "app"
+name = "vallyChat"
 version = "0.1.0"
 description = "Add your description here"
 readme = "README.md"
@@ -7,6 +7,7 @@ requires-python = ">=3.13"
 dependencies = [
     "bcrypt==4.3.0",
     "bidict==0.23.1",
+    "bleach>=6.3.0",
     "blinker==1.9.0",
     "click==8.3.1",
     "cuid2==2.0.1",
@@ -23,6 +24,7 @@ dependencies = [
     "itsdangerous==2.2.0",
     "jinja2==3.1.6",
     "loguru==0.7.3",
+    "markdown>=3.10.2",
     "markupsafe==3.0.3",
     "packaging==25.0",
     "pyjwt==2.8.0",
