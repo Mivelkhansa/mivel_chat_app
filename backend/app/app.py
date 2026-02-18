@@ -16,7 +16,8 @@ from flask_cors import CORS
 from flask_socketio import (
     SocketIO,
     emit,
-    join_room,
+    join_room as socket_join_room,
+    leave_room as socket_leave_room,
 )
 from loguru import logger
 from markdown import markdown
@@ -946,7 +947,16 @@ def socket_join_rooms(data):
         emit("error", {"error": "Unauthorized"})
         return
 
+    if not isinstance(data, dict):
+        emit("error", {"error": "Invalid join payload"})
+        return
+
     room_ids = data.get("room_ids", [])
+    if not isinstance(room_ids, list):
+        emit("error", {"error": "Invalid room list"})
+        return
+
+    room_ids = [str(room_id) for room_id in room_ids if room_id is not None]
     db = session_local()
     try:
         allowed_rooms = (
@@ -959,7 +969,7 @@ def socket_join_rooms(data):
             .all()
         )
         for (room_id,) in allowed_rooms:
-            join_room(room_id)
+            socket_join_room(room_id)
             state["rooms"].add(room_id)
 
         emit("joined_rooms", {"rooms": list(state["rooms"])})
@@ -1064,13 +1074,28 @@ def send_message(data):
 @socketio.on("leave_room")
 def leave_room_handler(data):
     state = socket_state.get(request.sid)
-    room_id = data.get("room")
-
-    if not state or room_id not in state["rooms"]:
+    if not state:
         return
 
-    leave_room(room_id)
-    state["rooms"].remove(room_id)
+    if not isinstance(data, dict):
+        emit("error", {"error": "Invalid leave payload"})
+        return
+
+    room_id = data.get("room")
+    if room_id is None:
+        emit("error", {"error": "Missing room"})
+        return
+
+    room_id = str(room_id)
+    if room_id not in state["rooms"]:
+        return
+
+    try:
+        socket_leave_room(room_id)
+    except Exception as e:
+        logger.warning("Socket leave_room failed", request_id=request.sid, room_id=room_id, error=str(e))
+
+    state["rooms"].discard(room_id)
 
 
 @socketio.on("disconnect")
@@ -1084,8 +1109,7 @@ def socket_disconnect(reason):
 
 @socketio.on_error_default
 def socket_error_handler(error):
-    socket_state.pop(request.sid, None)
-    logger.error("Socket error", error=error)
+    logger.error("Socket error", sid=request.sid, error=str(error))
 
 
 # -------------------------
