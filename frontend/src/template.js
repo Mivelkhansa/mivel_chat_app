@@ -138,14 +138,21 @@ export const roomSettingsTemplate = (room) => {
   ${room.members
     .map(
       (member) => `
-    <div class="member-row">
-      <span>${member.name} <span class="muted-value">${member.role}</span></span>
-      <button class="pill-button" type="button">Edit</button>
-    </div>
-  `,
+      <div class="member-row">
+        <span>${member.name} <span class="muted-value">${member.role}</span></span>
+        <button
+          class="pill-button edit-member-btn"
+          data-id="${member.id}"
+          type="button"
+        >
+          Edit
+        </button>
+      </div>
+    `,
     )
     .join("")}
   </div>
+
   <div class="settings-footer">
     <button id="leave-room-button" class="danger-link" type="button">Leave Room</button>
   </div>
@@ -218,6 +225,23 @@ export const joinRoomPopupTemplate = () => `
       <button id="join-room-cancel" class="button" type="button">Cancel</button>
     </div>
     <span id="open-create-room" class="join-room">Create room</span>
+  </div>
+</div>
+`;
+
+export const editMemberPopupTemplate = () => `
+<div id="edit-member-popup-overlay" class="overlay">
+  <div class="auth-modal">
+    <h2>Edit member</h2>
+    <p id="member-name"></p>
+    <p id="member-role" class="muted-value"></p>
+
+    <div class="actions">
+      <button id="promote-admin" class="button">Promote to admin</button>
+      <button id="demote-member" class="button">Make member</button>
+      <button id="ban-member" class="button danger">Ban</button>
+      <button id="edit-member-cancel" class="button">Cancel</button>
+    </div>
   </div>
 </div>
 `;

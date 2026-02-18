@@ -16,7 +16,11 @@ from flask_cors import CORS
 from flask_socketio import (
     SocketIO,
     emit,
+)
+from flask_socketio import (
     join_room as socket_join_room,
+)
+from flask_socketio import (
     leave_room as socket_leave_room,
 )
 from loguru import logger
@@ -36,6 +40,7 @@ from config import (
     MAX_MESSAGE_LENGTH,
     REDIS_HOST,
     REDIS_PORT,
+    user,
 )
 from db import init_db, session_local
 from models import MemberRole, Room_members
@@ -532,7 +537,10 @@ def my_rooms():
             .join(
                 models.Room_members, models.Room.room_id == models.Room_members.room_id
             )
-            .filter(models.Room_members.user_id == user_id)
+            .filter(
+                models.Room_members.user_id == user_id,
+                models.Room_members.member_role != MemberRole.BANNED,
+            )
             .all()
         )
         rooms_list = [{"id": r, "name": n, "description": d} for r, n, d in rooms]
@@ -884,6 +892,89 @@ def list_members(room_id):
         return jsonify({"error": "Failed to retrieve members"}), 500
 
 
+@app.route("/room/<string:room_id>/ban/<string:user_id>", methods=["POST"])
+def ban_member(room_id, user_id):
+    token = get_token_from_header()
+    try:
+        payload = verify_access_token(str(token))
+        requester_user_id = payload["sub"]
+    except jwt.ExpiredSignatureError:
+        g.log.error("Token expired", token=token)
+        return jsonify({"error": "Token expired"}), 401
+    except jwt.InvalidTokenError:
+        g.log.error("Invalid token", token=token)
+        return jsonify({"error": "Invalid token"}), 401
+
+    try:
+        is_admin_or_owner = (
+            g.db.query(models.Room_members)
+            .filter_by(user_id=requester_user_id, room_id=room_id)
+            .first()
+        )
+        if not is_admin_or_owner:
+            g.log.error(
+                "User is not an admin or owner",
+                user_id=requester_user_id,
+                room_id=room_id,
+            )
+            return jsonify({"error": "User is not an admin or owner"}), 403
+
+        if is_admin_or_owner.member_role not in [
+            models.MemberRole.ADMIN,
+            models.MemberRole.OWNER,
+        ]:
+            g.log.error(
+                "User is not an admin or owner",
+                user_id=requester_user_id,
+                room_id=room_id,
+                member_role=is_admin_or_owner.member_role,
+            )
+            return jsonify({"error": "User is not an admin or owner"}), 403
+    except SQLAlchemyError as e:
+        g.log.error(
+            "Error checking admin or owner status",
+            error=str(e),
+            user_id=requester_user_id,
+            room_id=room_id,
+        )
+        return jsonify({"error": "Internal server error"}), 500
+    try:
+        banned_member = (
+            g.db.query(models.Room_members)
+            .filter_by(room_id=room_id, user_id=user_id)
+            .first()
+        )
+
+        if not banned_member:
+            g.log.error(
+                "User is not a member of the room",
+                user_id=requester_user_id,
+                room_id=room_id,
+            )
+            return jsonify({"error": "User is not a member of the room"}), 403
+
+        if banned_member.member_role == MemberRole.BANNED:
+            g.log.error(
+                "User is already banned",
+                user_id=requester_user_id,
+                room_id=room_id,
+            )
+            return jsonify({"error": "User is already banned"}), 403
+
+        banned_member.member_role = MemberRole.BANNED
+        g.db.commit()
+        return jsonify({"message": "User banned successfully"}), 200
+
+    except SQLAlchemyError as e:
+        g.log.error(
+            "Error banning user",
+            error=str(e),
+            user_id=requester_user_id,
+            room_id=room_id,
+        )
+        return jsonify({"error": "Internal server error"}), 500
+
+
 # -------------------------
 # Socket.IO (JWT)
 # -------------------------
@@ -1093,7 +1184,12 @@ def leave_room_handler(data):
     try:
         socket_leave_room(room_id)
     except Exception as e:
-        logger.warning("Socket leave_room failed", request_id=request.sid, room_id=room_id, error=str(e))
+        logger.warning(
+            "Socket leave_room failed",
+            request_id=request.sid,
+            room_id=room_id,
+            error=str(e),
+        )
 
     state["rooms"].discard(room_id)
 
