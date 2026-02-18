@@ -17,7 +17,6 @@ from flask_socketio import (
     SocketIO,
     emit,
     join_room,
-    leave_room,
 )
 from loguru import logger
 from markdown import markdown
@@ -231,7 +230,7 @@ def start_request():
         except jwt.InvalidTokenError:
             g.log.warning("Invalid token for request")
 
-    g.log = g.log.bind(user_id=g.user_id)
+    g.log.bind(user_id=g.user_id)
     g.log.trace(f"{request.method} {request.path} started")
 
 
@@ -896,6 +895,11 @@ def socket_connect(auth):
     request_id = request.sid
     token = None
     log = logger.bind(request_id=request_id)
+    log.info("Socket connected")
+    if not auth or "token" not in auth:
+        log.error("Missing token on connect")
+        return False
+
     if auth:
         token = auth.get("token")
 
@@ -934,18 +938,16 @@ def socket_connect(auth):
 
 
 @socketio.on("join_rooms")
-def join_rooms(data):
-    request_id = request.sid
-    log = logger.bind(request_id=request_id)
-    state = socket_state.get(request_id)
+def socket_join_rooms(data):
+    log = logger.bind(request_id=request.sid)
+    state = socket_state.get(request.sid)
     if not state:
-        log.error("Unauthorized")
+        log.error("Unauthorized attempt to join rooms")
         emit("error", {"error": "Unauthorized"})
         return
 
     room_ids = data.get("room_ids", [])
     db = session_local()
-
     try:
         allowed_rooms = (
             db.query(models.Room_members.room_id)
@@ -962,7 +964,6 @@ def join_rooms(data):
 
         emit("joined_rooms", {"rooms": list(state["rooms"])})
     except Exception as e:
-        db.rollback()
         log.error("Failed to join rooms", error=str(e))
         emit("error", {"error": "Failed to join rooms"})
     finally:

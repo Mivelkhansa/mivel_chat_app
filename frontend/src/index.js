@@ -33,19 +33,31 @@ const state = {
 };
 
 function saveAuth({ access_token, refresh_token, username }) {
-  if (access_token) {
-    state.accessToken = access_token;
-    state.userId = decodeUserIdFromToken(access_token);
-    localStorage.setItem("access_token", access_token);
+  if (!access_token) {
+    console.log("Access token is missing");
+    showError("Access token is missing");
+    return;
   }
-  if (refresh_token) {
-    state.refreshToken = refresh_token;
-    localStorage.setItem("refresh_token", refresh_token);
+
+  // refresh_token might be missing on login? allow but warn
+  if (!refresh_token) {
+    console.warn("Refresh token missing, using previous one if exists");
+    refresh_token = state.refreshToken;
   }
+
+  state.accessToken = access_token;
+  state.userId = decodeUserIdFromToken(access_token);
+  localStorage.setItem("access_token", access_token);
+
+  state.refreshToken = refresh_token;
+  localStorage.setItem("refresh_token", refresh_token);
+
   if (username) {
     state.username = username;
     localStorage.setItem("username", username);
   }
+
+  console.log("Auth saved");
 }
 
 function clearAuth() {
@@ -74,6 +86,7 @@ async function api(path, options = {}, allowRetry = true) {
   });
 
   if (response.status === 401 && allowRetry && state.refreshToken) {
+    console.warn("Access token expired, refreshing...");
     const refreshed = await refreshAccessToken();
     if (refreshed) {
       return api(path, options, false);
@@ -103,7 +116,11 @@ async function refreshAccessToken() {
     }
 
     const data = await response.json();
-    saveAuth({ access_token: data.access_token });
+    saveAuth({
+      access_token: data.access_token,
+      refresh_token: data.refresh_token || state.refreshToken,
+      username: state.username,
+    });
     return true;
   } catch {
     clearAuth();
@@ -288,7 +305,7 @@ function renderMessage({ sender, message, timestamp, sender_id }) {
 }
 
 function renderChat(room) {
-  state.activeRoom = room;
+  state.activeRoom = null; // reset first to avoid stale room
   const app = document.getElementById("app");
   app.innerHTML = chatPageTemplate(room.name);
 
@@ -316,18 +333,29 @@ function renderChat(room) {
       }
     });
 
-  state.socket.emit("join_rooms", {
-    room_ids: [String(room.id)],
-  });
+  // Join room
+  state.socket.emit("join_rooms", { room_ids: [String(room.id)] });
 
-  state.socket.once("joined_rooms", (data) => {
+  // Remove old listeners first
+  state.socket.off("joined_rooms");
+  state.socket.off("old_messages");
+
+  // Listen for join confirmation
+  state.socket.on("joined_rooms", (data) => {
     if (data.rooms.includes(String(room.id))) {
-      state.socket.emit("fetch_history", {
-        room: String(room.id),
-      });
+      state.activeRoom = room; // only set after join success
+      state.socket.emit("fetch_history", { room: String(room.id) });
     } else {
       showError("Failed to join room");
     }
+  });
+
+  // Listen for old messages
+  state.socket.on("old_messages", (data) => {
+    const container = document.getElementById("chat-container");
+    if (!container) return;
+    container.innerHTML = "";
+    data.messages.forEach(renderMessage);
   });
 }
 
@@ -432,55 +460,46 @@ function sendActiveMessage() {
   input.value = "";
 }
 
-function initSocket() {
+async function initSocket() {
   if (!window.io || !state.accessToken) return;
 
-  if (state.socket) {
-    state.socket.disconnect();
+  if (await refreshAccessToken()) {
+    state.userId = decodeUserIdFromToken(state.accessToken);
+  } else {
+    clearAuth();
+    renderAuthModal();
+    return;
   }
 
+  if (state.socket) state.socket.disconnect();
+
   state.socket = io("http://localhost:5000", {
-    auth: {
-      token: state.accessToken,
-    },
-    transports: ["websocket"], // optional but clean
+    auth: { token: state.accessToken },
+    transports: ["websocket"],
   });
 
+  // wait until connected
   state.socket.on("connect", () => {
     console.log("Connected:", state.socket.id);
-    if (state.rooms.length > 0) {
+
+    // safe to join rooms now
+    if (state.activeRoom) {
       state.socket.emit("join_rooms", {
-        room_ids: state.rooms.map((r) => String(r.id)),
+        room_ids: [String(state.activeRoom.id)],
       });
     }
   });
 
-  state.socket.on("disconnect", () => {
-    console.log("Disconnected");
-  });
+  state.socket.on("disconnect", () => console.log("Disconnected"));
+  state.socket.on("error", (data) => showError(data.error));
 
-  state.socket.on("error", (data) => {
-    showError(data.error);
-  });
-
-  // 🔹 History (old messages)
-  state.socket.on("old_messages", (data) => {
-    const container = document.getElementById("chat-container");
-    if (!container) return;
-
-    container.innerHTML = "";
-    data.messages.forEach(renderMessage);
-  });
-
-  // 🔹 Live messages
-  state.socket.on("new_message", (data) => {
-    renderMessage(data);
-  });
+  state.socket.on("new_message", renderMessage);
 }
 
 async function bootstrap() {
   if (state.accessToken) {
     state.userId = decodeUserIdFromToken(state.accessToken);
+    await refreshAccessToken();
   }
 
   if (!state.accessToken) {
