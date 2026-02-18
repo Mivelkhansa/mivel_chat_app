@@ -945,13 +945,25 @@ def ban_member(room_id, user_id):
             .first()
         )
 
+        if user_id == requester_user_id:
+            g.log.error(
+                "User cannot ban themselves",
+                user_id=user_id,
+                room_id=room_id,
+            )
+            return jsonify({"error": "User cannot ban themselves"}), 403
+
         if not banned_member:
             g.log.error(
                 "User is not a member of the room",
-                user_id=requester_user_id,
+                user_id=user_id,
                 room_id=room_id,
             )
-            return jsonify({"error": "User is not a member of the room"}), 403
+            return jsonify({"error": "User is not a member of the room"}), 404
+
+        if banned_member.member_role == MemberRole.OWNER:
+            g.log.error("Cannot ban owner", user_id=user_id, room_id=room_id)
+            return jsonify({"error": "Cannot ban owner"}), 403
 
         if banned_member.member_role == MemberRole.BANNED:
             g.log.error(
