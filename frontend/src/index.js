@@ -11,7 +11,7 @@ import {
   editMemberPopupTemplate,
 } from "./template.js";
 
-const API_BASE = " https://publisher-treating-santa-cam.trycloudflare.com";
+const API_BASE = "localhost:5000";
 
 function decodeUserIdFromToken(token) {
   try {
@@ -464,7 +464,8 @@ function renderEditMemberPopup(member) {
   const banBtn = document.getElementById("ban-member");
   // Ban
   banBtn.addEventListener("click", async () => {
-    if (member.role === "banned") {
+    const role = (member.role || "").toLowerCase();
+    if (role === "banned") {
       try {
         await api(`/room/${state.activeRoom.id}/unban/${member.id}`, {
           method: "POST",
@@ -485,37 +486,36 @@ function renderEditMemberPopup(member) {
         showError(err.message);
       }
     }
+    // Promote
+    document
+      .getElementById("promote-admin")
+      .addEventListener("click", async () => {
+        try {
+          await api(`/room/${state.activeRoom.id}/promote/${member.id}`, {
+            method: "POST",
+          });
+          overlay.remove();
+          await renderRoomSettings();
+        } catch (err) {
+          showError(err.message);
+        }
+      });
+
+    // Demote
+    document
+      .getElementById("demote-member")
+      .addEventListener("click", async () => {
+        try {
+          await api(`/room/${state.activeRoom.id}/demote/${member.id}`, {
+            method: "POST",
+          });
+          overlay.remove();
+          await renderRoomSettings();
+        } catch (err) {
+          showError(err.message);
+        }
+      });
   });
-
-  // Promote
-  document
-    .getElementById("promote-admin")
-    .addEventListener("click", async () => {
-      try {
-        await api(`/room/${state.activeRoom.id}/promote/${member.id}`, {
-          method: "POST",
-        });
-        overlay.remove();
-        await renderRoomSettings();
-      } catch (err) {
-        showError(err.message);
-      }
-    });
-
-  // Demote
-  document
-    .getElementById("demote-member")
-    .addEventListener("click", async () => {
-      try {
-        await api(`/room/${state.activeRoom.id}/demote/${member.id}`, {
-          method: "POST",
-        });
-        overlay.remove();
-        await renderRoomSettings();
-      } catch (err) {
-        showError(err.message);
-      }
-    });
 }
 
 function sendActiveMessage() {
