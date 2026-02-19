@@ -229,14 +229,15 @@ export const joinRoomPopupTemplate = () => `
 </div>
 `;
 
-export const editMemberPopupTemplate = () => `
+export const editMemberPopupTemplate = (member) => `
 <div id="edit-member-popup-overlay" class="overlay">
   <div class="auth-modal">
     <h2>Edit member</h2>
-    <p id="member-name"></p>
-    <p id="member-role" class="muted-value"></p>
+    <p id="member-name">${member.name}</p>
+    <p id="member-role" class="muted-value">${member.role}</p>
 
     <div class="actions">
+      <button id="transfer-owner" class="button">Transfer ownership</button>
       <button id="promote-admin" class="button">Promote to admin</button>
       <button id="demote-member" class="button">Make member</button>
       <button id="ban-member" class="button danger">Ban</button>

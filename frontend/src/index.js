@@ -11,7 +11,7 @@ import {
   editMemberPopupTemplate,
 } from "./template.js";
 
-const API_BASE = "http://localhost:5000";
+const API_BASE = " https://publisher-treating-santa-cam.trycloudflare.com";
 
 function decodeUserIdFromToken(token) {
   try {
@@ -446,7 +446,10 @@ async function renderRoomSettings() {
 }
 
 function renderEditMemberPopup(member) {
-  document.body.insertAdjacentHTML("beforeend", editMemberPopupTemplate());
+  document.body.insertAdjacentHTML(
+    "beforeend",
+    editMemberPopupTemplate(member),
+  );
 
   document.getElementById("member-name").textContent = member.name;
   document.getElementById("member-role").textContent = member.role;
@@ -458,16 +461,29 @@ function renderEditMemberPopup(member) {
     .getElementById("edit-member-cancel")
     .addEventListener("click", () => overlay.remove());
 
+  const banBtn = document.getElementById("ban-member");
   // Ban
-  document.getElementById("ban-member").addEventListener("click", async () => {
-    try {
-      await api(`/room/${state.activeRoom.id}/ban/${member.id}`, {
-        method: "POST",
-      });
-      overlay.remove();
-      await renderRoomSettings();
-    } catch (err) {
-      showError(err.message);
+  banBtn.addEventListener("click", async () => {
+    if (member.role === "banned") {
+      try {
+        await api(`/room/${state.activeRoom.id}/unban/${member.id}`, {
+          method: "POST",
+        });
+        overlay.remove();
+        await renderRoomSettings();
+      } catch (err) {
+        showError(err.message);
+      }
+    } else {
+      try {
+        await api(`/room/${state.activeRoom.id}/ban/${member.id}`, {
+          method: "POST",
+        });
+        overlay.remove();
+        await renderRoomSettings();
+      } catch (err) {
+        showError(err.message);
+      }
     }
   });
 
