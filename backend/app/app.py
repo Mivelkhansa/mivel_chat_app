@@ -40,7 +40,6 @@ from config import (
     MAX_MESSAGE_LENGTH,
     REDIS_HOST,
     REDIS_PORT,
-    user,
 )
 from db import init_db, session_local
 from models import MemberRole, Room_members
@@ -56,6 +55,7 @@ socketio = SocketIO(
         "http://localhost:3000",
         "http://localhost:5173",
         "http://localhost:6767",
+        "https://crossing-watches-isle-fonts.trycloudflare.com",
     ],
     logger=False,
     engineio_logger=False,
@@ -66,7 +66,12 @@ socketio = SocketIO(
 
 CORS(
     app,
-    origins=["http://localhost:3000", "http://localhost:5173", "http://localhost:6767"],
+    origins=[
+        "http://localhost:3000",
+        "http://localhost:5173",
+        "http://localhost:6767",
+        "https://crossing-watches-isle-fonts.trycloudflare.com",
+    ],
     supports_credentials=True,
     allow_headers=["Content-Type", "Authorization"],
     methods=["GET", "POST", "PATCH", "DELETE", "OPTIONS"],
@@ -985,6 +990,300 @@ def ban_member(room_id, user_id):
             room_id=room_id,
         )
         return jsonify({"error": "Internal server error"}), 500
+
+
+@app.route("/room/<string:room_id>/unban/<string:user_id>", methods=["POST"])
+def unban_member(room_id, user_id):
+    token = get_token_from_header()
+    try:
+        payload = verify_access_token(str(token))
+        requester_user_id = payload["sub"]
+    except jwt.ExpiredSignatureError:
+        g.log.error("Token expired", token=token)
+        return jsonify({"error": "Token expired"}), 401
+    except jwt.InvalidTokenError:
+        g.log.error("Invalid token", token=token)
+        return jsonify({"error": "Invalid token"}), 401
+    if requester_user_id == user_id:
+        g.log.error(
+            "Cannot unban yourself",
+            user_id=user_id,
+            requester_user_id=requester_user_id,
+        )
+        return jsonify({"error": "Cannot unban yourself"}), 403
+
+    try:
+        is_admin_or_owner = (
+            g.db.query(models.Room_members)
+            .filter_by(user_id=requester_user_id, room_id=room_id)
+            .first()
+        )
+        if not is_admin_or_owner:
+            g.log.error(
+                "User is not an admin or owner",
+                user_id=requester_user_id,
+                room_id=room_id,
+            )
+            return jsonify({"error": "User is not an admin or owner"}), 404
+
+        if is_admin_or_owner.member_role not in [
+            models.MemberRole.ADMIN,
+            models.MemberRole.OWNER,
+        ]:
+            g.log.error(
+                "User is not an admin or owner",
+                user_id=requester_user_id,
+                room_id=room_id,
+                member_role=is_admin_or_owner.member_role,
+            )
+            return jsonify({"error": "User is not an admin or owner"}), 403
+    except SQLAlchemyError as e:
+        g.log.error(
+            "Error checking admin or owner status",
+            error=str(e),
+            user_id=requester_user_id,
+            room_id=room_id,
+        )
+        return jsonify({"error": "Internal server error"}), 500
+
+    try:
+        unbanned_member = (
+            g.db.query(models.Room_members)
+            .filter_by(
+                room_id=room_id,
+                user_id=user_id,
+            )
+            .first()
+        )
+        if not unbanned_member:
+            g.log.error(
+                "User is not a member of the room",
+                user_id=requester_user_id,
+                room_id=room_id,
+            )
+            return jsonify({"error": "User is not a member of the room"}), 404
+
+        if unbanned_member.member_role != MemberRole.BANNED:
+            g.log.error(
+                "User is not banned",
+                user_id=requester_user_id,
+                room_id=room_id,
+            )
+            return jsonify({"error": "User is not banned"}), 403
+
+        unbanned_member.member_role = MemberRole.MEMBER
+
+        g.db.commit()
+        g.log.info(
+            "User unbanned successfully",
+            user_id=requester_user_id,
+            room_id=room_id,
+        )
+        return jsonify({"message": "User unbanned successfully"}), 200
+    except SQLAlchemyError as e:
+        g.log.error(
+            "Error unbanning user",
+            error=str(e),
+            user_id=requester_user_id,
+            room_id=room_id,
+        )
+        return jsonify({"error": "Internal server error"}), 500
+
+
+@app.route("/room/<string:room_id>/promote/<string:user_id>", methods=["POST"])
+def promote_user(room_id, user_id):
+    token = get_token_from_header()
+    try:
+        payload = verify_access_token(str(token))
+        requester_user_id = payload["sub"]
+    except jwt.ExpiredSignatureError:
+        g.log.error("Token expired", token=token)
+        return jsonify({"error": "Token expired"}), 401
+    except jwt.InvalidTokenError:
+        g.log.error("Invalid token", token=token)
+        return jsonify({"error": "Invalid token"}), 401
+    if requester_user_id == user_id:
+        g.log.error(
+            "Cannot unban yourself",
+            user_id=user_id,
+            requester_user_id=requester_user_id,
+        )
+        return jsonify({"error": "Cannot unban yourself"}), 403
+
+    try:
+        is_admin_or_owner = (
+            g.db.query(models.Room_members)
+            .filter_by(user_id=requester_user_id, room_id=room_id)
+            .first()
+        )
+        if not is_admin_or_owner:
+            g.log.error(
+                "User is not an admin or owner",
+                user_id=requester_user_id,
+                room_id=room_id,
+            )
+            return jsonify({"error": "User is not an admin or owner"}), 404
+
+        if is_admin_or_owner.member_role not in [
+            models.MemberRole.ADMIN,
+            models.MemberRole.OWNER,
+        ]:
+            g.log.error(
+                "User is not an admin or owner",
+                user_id=requester_user_id,
+                room_id=room_id,
+                member_role=is_admin_or_owner.member_role,
+            )
+            return jsonify({"error": "User is not an admin or owner"}), 403
+    except SQLAlchemyError as e:
+        g.log.error(
+            "Error checking admin or owner status",
+            error=str(e),
+            user_id=requester_user_id,
+            room_id=room_id,
+        )
+        return jsonify({"error": "Internal server error"}), 500
+    try:
+        promote_member = (
+            g.db.query(models.Room_members)
+            .filter_by(user_id=user_id, room_id=room_id)
+            .first()
+        )
+        if not promote_member:
+            g.log.error(
+                "User is not a member",
+                user_id=user_id,
+                room_id=room_id,
+            )
+            return jsonify({"error": "User is not a member"}), 404
+        if promote_member.member_role == MemberRole.ADMIN:
+            g.log.error(
+                "User is already an admin",
+                user_id=user_id,
+                room_id=room_id,
+            )
+            return jsonify({"error": "User is already an admin"}), 400
+        if promote_member.member_role == MemberRole.OWNER:
+            g.log.error(
+                "User is an owner",
+                user_id=user_id,
+                room_id=room_id,
+            )
+            return jsonify({"error": "User is already an owner"}), 400
+        promote_member.member_role = MemberRole.ADMIN
+        g.db.commit()
+        g.log.info(
+            "User promoted to admin",
+            user_id=user_id,
+            room_id=room_id,
+        )
+        return jsonify({"message": "User promoted to admin"}), 200
+    except SQLAlchemyError as e:
+        g.log.error(
+            "Failed to promote user to admin",
+            user_id=user_id,
+            room_id=room_id,
+            error=str(e),
+        )
+        return jsonify({"error": "Failed to promote user to admin"}), 500
+
+
+@app.route("/room/<string:room_id>/demote/<string:user_id>", methods=["POST"])
+def demote_user(room_id, user_id):
+    token = get_token_from_header()
+    try:
+        payload = verify_access_token(str(token))
+        requester_user_id = payload["sub"]
+    except jwt.ExpiredSignatureError:
+        g.log.error("Token expired", token=token)
+        return jsonify({"error": "Token expired"}), 401
+    except jwt.InvalidTokenError:
+        g.log.error("Invalid token", token=token)
+        return jsonify({"error": "Invalid token"}), 401
+    if requester_user_id == user_id:
+        g.log.error(
+            "Cannot unban yourself",
+            user_id=user_id,
+            requester_user_id=requester_user_id,
+        )
+        return jsonify({"error": "Cannot unban yourself"}), 403
+
+    try:
+        is_admin_or_owner = (
+            g.db.query(models.Room_members)
+            .filter_by(user_id=requester_user_id, room_id=room_id)
+            .first()
+        )
+        if not is_admin_or_owner:
+            g.log.error(
+                "User is not an admin or owner",
+                user_id=requester_user_id,
+                room_id=room_id,
+            )
+            return jsonify({"error": "User is not an admin or owner"}), 404
+
+        if is_admin_or_owner.member_role not in [
+            models.MemberRole.ADMIN,
+            models.MemberRole.OWNER,
+        ]:
+            g.log.error(
+                "User is not an admin or owner",
+                user_id=requester_user_id,
+                room_id=room_id,
+                member_role=is_admin_or_owner.member_role,
+            )
+            return jsonify({"error": "User is not an admin or owner"}), 403
+    except SQLAlchemyError as e:
+        g.log.error(
+            "Error checking admin or owner status",
+            error=str(e),
+            user_id=requester_user_id,
+            room_id=room_id,
+        )
+        return jsonify({"error": "Internal server error"}), 500
+    try:
+        demote_member = (
+            g.db.query(models.Room_members)
+            .filter_by(user_id=user_id, room_id=room_id)
+            .first()
+        )
+        if not demote_member:
+            g.log.error(
+                "User is not a member",
+                user_id=user_id,
+                room_id=room_id,
+            )
+            return jsonify({"error": "User is not a member"}), 404
+        if demote_member.member_role == MemberRole.MEMBER:
+            g.log.error(
+                "User is already an admin",
+                user_id=user_id,
+                room_id=room_id,
+            )
+            return jsonify({"error": "User is already an admin"}), 400
+        if demote_member.member_role == MemberRole.OWNER:
+            g.log.error(
+                "User is an owner",
+                user_id=user_id,
+                room_id=room_id,
+            )
+            return jsonify({"error": "User is already an owner"}), 400
+        demote_member.member_role = MemberRole.MEMBER
+        g.db.commit()
+        g.log.info(
+            "User demoted to member",
+            user_id=user_id,
+            room_id=room_id,
+        )
+        return jsonify({"message": "User demoted to member"}), 200
+    except SQLAlchemyError as e:
+        g.log.error(
+            "Failed to promote user to admin",
+            user_id=user_id,
+            room_id=room_id,
+            error=str(e),
+        )
+        return jsonify({"error": "Failed to promote user to admin"}), 500
 
 
 # -------------------------
