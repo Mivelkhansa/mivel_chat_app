@@ -11,7 +11,7 @@ import {
   editMemberPopupTemplate,
 } from "./template.js";
 
-const API_BASE = "localhost:5000";
+const API_BASE = "http://localhost:5000";
 
 function decodeUserIdFromToken(token) {
   try {
@@ -380,6 +380,15 @@ function renderUserSettings() {
   });
 }
 
+function renderAbout() {
+  const app = document.getElementById("app");
+  app.innerHTML = aboutTemplate();
+
+  document.getElementById("back-button").addEventListener("click", () => {
+    renderUserSettings();
+  });
+}
+
 async function renderRoomSettings() {
   const app = document.getElementById("app");
   const room = state.activeRoom;
@@ -486,36 +495,51 @@ function renderEditMemberPopup(member) {
         showError(err.message);
       }
     }
-    // Promote
-    document
-      .getElementById("promote-admin")
-      .addEventListener("click", async () => {
-        try {
-          await api(`/room/${state.activeRoom.id}/promote/${member.id}`, {
-            method: "POST",
-          });
-          overlay.remove();
-          await renderRoomSettings();
-        } catch (err) {
-          showError(err.message);
-        }
-      });
-
-    // Demote
-    document
-      .getElementById("demote-member")
-      .addEventListener("click", async () => {
-        try {
-          await api(`/room/${state.activeRoom.id}/demote/${member.id}`, {
-            method: "POST",
-          });
-          overlay.remove();
-          await renderRoomSettings();
-        } catch (err) {
-          showError(err.message);
-        }
-      });
   });
+
+  // Promote
+  document
+    .getElementById("promote-admin")
+    .addEventListener("click", async () => {
+      try {
+        await api(`/room/${state.activeRoom.id}/promote/${member.id}`, {
+          method: "POST",
+        });
+        overlay.remove();
+        await renderRoomSettings();
+      } catch (err) {
+        showError(err.message);
+      }
+    });
+
+  // Demote
+  document
+    .getElementById("demote-member")
+    .addEventListener("click", async () => {
+      try {
+        await api(`/room/${state.activeRoom.id}/demote/${member.id}`, {
+          method: "POST",
+        });
+        overlay.remove();
+        await renderRoomSettings();
+      } catch (err) {
+        showError(err.message);
+      }
+    });
+
+  document
+    .getElementById("transfer-owner")
+    .addEventListener("click", async () => {
+      try {
+        await api(`/room/${state.activeRoom.id}/transfer-owner/${member.id}`, {
+          method: "POST",
+        });
+        overlay.remove();
+        await renderRoomSettings();
+      } catch (err) {
+        showError(err.message);
+      }
+    });
 }
 
 function sendActiveMessage() {
