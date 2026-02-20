@@ -5,7 +5,7 @@ from datetime import datetime, timedelta, timezone
 
 import jwt
 
-from config import (
+from ..config import (
     JWT_ACCESS_EXPIRATION,
     JWT_ACCESS_SECRET_KEY,
     JWT_ALGORITHM,
