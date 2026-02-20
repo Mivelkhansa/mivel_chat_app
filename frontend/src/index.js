@@ -532,7 +532,7 @@ function renderEditMemberPopup(member) {
     .addEventListener("click", async () => {
       try {
         await api(`/room/${state.activeRoom.id}/transfer-owner/${member.id}`, {
-          method: "POSTO",
+          method: "POST",
         });
         overlay.remove();
         await renderRoomSettings();
