@@ -1,16 +1,15 @@
 # app.py
 # This work is licensed under the terms of the MIT license
 
-import datetime
 import sys
 import time
 import uuid
-from datetime import timedelta, timezone
+from datetime import timezone
 
 import bcrypt
 import jwt
 import redis
-from bleach import Linker, clean, linkifier, linkify
+from bleach import Linker
 from flask import Flask, g, jsonify, request
 from flask_cors import CORS
 from flask_socketio import (
@@ -24,24 +23,22 @@ from flask_socketio import (
     leave_room as socket_leave_room,
 )
 from loguru import logger
-from markdown import markdown
 from sqlalchemy.exc import NoResultFound, SQLAlchemyError
 
 import models
 from config import (
-    ALLOWED_ATTRIBUTES,
-    ALLOWED_PROTOCOLS,
-    ALLOWED_TAGS,
-    JWT_ACCESS_EXPIRATION,
-    JWT_ACCESS_SECRET_KEY,
-    JWT_ALGORITHM,
-    JWT_REFRESH_EXPIRATION,
-    JWT_REFRESH_SECRET_KEY,
     MAX_MESSAGE_LENGTH,
     REDIS_HOST,
     REDIS_PORT,
 )
 from db import init_db, session_local
+from lib.helper import get_username, render_message
+from lib.jwt_helper import (
+    create_access_token,
+    create_refresh_token,
+    verify_access_token,
+    verify_refresh_token,
+)
 from models import MemberRole, Room_members
 
 # -------------------------
@@ -112,71 +109,11 @@ logger.add(
     colorize=True,
 )
 logger.add(
-    "app.log",
+    "/log/app.log",
     format="{time:YYYY-MM-DD HH:mm:ss} | {level} | {message} | {extra}",
     level="TRACE",
     serialize=True,
 )
-
-
-# -------------------------
-# JWT helpers
-# -------------------------
-def create_access_token(user_id: str) -> str:
-    return jwt.encode(
-        {
-            "sub": user_id,
-            "typ": "access",
-            "iat": datetime.datetime.now(timezone.utc),
-            "exp": datetime.datetime.now(timezone.utc)
-            + timedelta(seconds=JWT_ACCESS_EXPIRATION),
-            "iss": "vally_chat_app",
-        },
-        JWT_ACCESS_SECRET_KEY,
-        algorithm=JWT_ALGORITHM,
-    )
-
-
-def create_refresh_token(user_id: str) -> str:
-    return jwt.encode(
-        {
-            "sub": user_id,
-            "typ": "refresh",
-            "iat": datetime.datetime.now(timezone.utc),
-            "exp": datetime.datetime.now(timezone.utc)
-            + timedelta(seconds=JWT_REFRESH_EXPIRATION),
-            "iss": "vally_chat_app",
-        },
-        JWT_REFRESH_SECRET_KEY,
-        algorithm=JWT_ALGORITHM,
-    )
-
-
-def verify_access_token(token: str):
-    payload = jwt.decode(
-        token,
-        JWT_ACCESS_SECRET_KEY,
-        algorithms=[JWT_ALGORITHM],
-    )
-    if payload.get("typ") != "access":
-        raise jwt.InvalidTokenError("Not an access token")
-    return payload
-
-
-def verify_refresh_token(token: str):
-    payload = jwt.decode(
-        token,
-        JWT_REFRESH_SECRET_KEY,
-        algorithms=[JWT_ALGORITHM],
-    )
-    if payload.get("typ") != "refresh":
-        raise jwt.InvalidTokenError("Not a refresh token")
-    return payload
-
-
-# -------------------------
-# Helper functions
-# -------------------------
 
 
 def get_token_from_header():
@@ -184,41 +121,6 @@ def get_token_from_header():
     if auth and auth.startswith("Bearer "):
         return auth.split(" ", 1)[1]
     return None
-
-
-def get_username(db, user_id: str) -> str:
-    return (
-        db.query(models.User.username).filter(models.User.user_id == user_id).scalar()
-    )
-
-
-def sanitize_message(message: str) -> str:
-    sanitized_message = clean(
-        message,
-        tags=ALLOWED_TAGS,
-        attributes=ALLOWED_ATTRIBUTES,
-        protocols=ALLOWED_PROTOCOLS,
-        strip=True,
-    )
-    sanitized_message = linkify(
-        sanitized_message,
-        callbacks=linkifier.DEFAULT_CALLBACKS
-        + [
-            lambda attrs, new=False: {
-                **attrs,
-                (None, "target"): "_blank",
-                (None, "rel"): "noopener noreferrer nofollow",
-            }
-        ],
-        skip_tags=["pre", "code"],
-    )
-    return sanitized_message
-
-
-def render_message(message: str) -> str:
-    html = markdown(message, extensions=["extra"])
-    sanitized_html = sanitize_message(html)
-    return sanitized_html
 
 
 # -------------------------
@@ -718,7 +620,7 @@ def manage_member(room_id, user_id):
 
 
 @app.route(
-    "/room/<string:room_id>/transfer-owner/<string:new_owner_id>", methods=["PATCH"]
+    "/room/<string:room_id>/transfer-owner/<string:new_owner_id>", methods=["POST"]
 )
 def transfer_owner(room_id, new_owner_id):
     token = get_token_from_header()
@@ -1442,6 +1344,7 @@ def send_message(data):
     if len(message) > MAX_MESSAGE_LENGTH:
         emit("error", {"error": "Message too long"})
         return
+    message = message.replace("```", "")
     message = render_message(message)
     db = session_local()
 
