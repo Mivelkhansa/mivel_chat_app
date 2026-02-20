@@ -8,7 +8,7 @@ import models
 from config import ALLOWED_ATTRIBUTES, ALLOWED_PROTOCOLS, ALLOWED_TAGS
 
 
-def get_username(db, user_id: str) -> str:
+def get_username(db, user_id: str) -> str | None:
     return (
         db.query(models.User.username).filter(models.User.user_id == user_id).scalar()
     )
